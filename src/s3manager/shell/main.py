@@ -1,0 +1,189 @@
+"""S3 Manager 앱 진입점.
+
+실행 순서:
+1. FastAPI(uvicorn) 서버를 백그라운드 스레드에서 기동.
+2. /api/health 폴링 → 서버 준비 완료 확인.
+3. NativeBridge 를 server.app 에 주입.
+4. pywebview 창 생성.
+5. pystray 트레이를 별도 스레드에서 기동.
+6. pywebview.start() 를 메인 스레드에서 실행 (macOS GUI 필수).
+
+macOS 제약:
+- Cocoa GUI는 반드시 메인 스레드에서 실행해야 한다.
+  → pywebview.start() 는 메인 스레드에서 호출한다.
+  → pystray 는 별도 daemon 스레드에서 실행한다.
+- 창을 닫아도 앱이 종료되지 않도록 should_close 콜백에서 hide() 처리한다.
+"""
+
+from __future__ import annotations
+
+import secrets
+import sys
+import threading
+import time
+import urllib.request
+import urllib.error
+
+import uvicorn
+
+from s3manager import settings
+
+
+# ------------------------------------------------------------------ #
+#  서버 기동 헬퍼                                                       #
+# ------------------------------------------------------------------ #
+
+def _start_server() -> None:
+    """uvicorn 서버를 현재 스레드에서 블로킹 실행한다."""
+    config = uvicorn.Config(
+        app="s3manager.server.app:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        log_level="warning",
+        # 단일 워커 — 로컬 전용
+        workers=1,
+    )
+    server = uvicorn.Server(config)
+    server.run()
+
+
+def _wait_for_server(timeout: float = 30.0, interval: float = 0.2) -> bool:
+    """서버가 /api/health 에 응답할 때까지 폴링 대기.
+
+    Returns:
+        True: 정상 응답, False: 타임아웃
+    """
+    health_url = f"{settings.BASE_URL}/api/health"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(health_url, timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    return False
+
+
+# ------------------------------------------------------------------ #
+#  메인 진입점                                                          #
+# ------------------------------------------------------------------ #
+
+def main() -> None:
+    """앱 메인 함수 — pyproject.toml scripts 진입점."""
+
+    # 1. FastAPI 서버를 백그라운드 스레드로 기동
+    server_thread = threading.Thread(target=_start_server, daemon=True, name="uvicorn")
+    server_thread.start()
+
+    # 2. 서버 준비 완료까지 대기
+    print(f"[S3 Manager] 서버 기동 대기 중... ({settings.BASE_URL})")
+    if not _wait_for_server():
+        print("[S3 Manager] 오류: 서버 기동 타임아웃. 앱을 종료합니다.")
+        sys.exit(1)
+    print("[S3 Manager] 서버 준비 완료.")
+
+    # 3. NativeBridge 주입 + 로컬 접근 토큰 발급/등록
+    from s3manager.shell.bridge import NativeBridge
+    from s3manager.server.app import set_auth_token, set_native_bridge  # type: ignore[import]
+
+    bridge = NativeBridge()
+    set_native_bridge(bridge)
+
+    # 실행마다 무작위 토큰을 발급. 이 토큰을 모르는 다른 프로세스/브라우저는 API 접근 불가.
+    # 토큰은 창 URL(?t=)로만 전달되며, 서버가 서빙하는 HTML에는 포함되지 않는다.
+    auth_token = secrets.token_urlsafe(32)
+    set_auth_token(auth_token)
+
+    # 4. pywebview 창 생성 (아직 start 전)
+    import webview
+
+    window = webview.create_window(
+        title=settings.APP_NAME,
+        url=f"{settings.BASE_URL}/?t={auth_token}",
+        width=1100,
+        height=760,
+        min_size=(800, 600),
+        # 창 닫기 버튼을 눌러도 앱이 종료되지 않도록 — hide 처리
+        # (pywebview 5.x: on_closed 는 이미 닫힌 후, hidden 을 지원하면 사용)
+    )
+
+    # ---------------------------------------------------------------- #
+    #  창 상태 제어 헬퍼                                                  #
+    # ---------------------------------------------------------------- #
+
+    _window_visible = [True]  # mutable 참조 (closure 용)
+
+    def show_window() -> None:
+        """트레이에서 창 보이기."""
+        try:
+            if not _window_visible[0]:
+                window.show()
+                _window_visible[0] = True
+            else:
+                # 이미 보이면 앞으로 가져오기
+                window.on_top = True
+                window.on_top = False
+        except Exception:
+            pass
+
+    def on_window_closed() -> None:
+        """창 닫기 버튼 → 실제로 닫지 않고 숨긴다."""
+        _window_visible[0] = False
+        try:
+            window.hide()
+        except Exception:
+            pass
+
+    # pywebview 5.x closing 이벤트: False 반환 → 닫기 취소
+    def on_closing() -> bool:
+        """창 닫기 시도 시 호출. False 반환으로 닫기를 취소하고 숨긴다."""
+        on_window_closed()
+        return False  # False = 닫기 취소
+
+    # ---------------------------------------------------------------- #
+    #  앱 종료 처리                                                       #
+    # ---------------------------------------------------------------- #
+
+    _quit_requested = threading.Event()
+
+    def quit_app() -> None:
+        """메뉴바 "종료" 클릭 → 서버·창 정리하고 종료."""
+        _quit_requested.set()
+        # pywebview 종료 → webview.start() 반환 → 프로세스 종료
+        try:
+            webview.windows[0].destroy()
+        except Exception:
+            pass
+
+    # ---------------------------------------------------------------- #
+    #  5. 메뉴바 아이콘 — pywebview와 동일한 NSApp에 부착 (별도 런루프 없음)  #
+    # ---------------------------------------------------------------- #
+    # macOS는 메인 NSApplication 런루프가 하나뿐이므로, pystray를 별도 스레드로
+    # 돌리면 webview.start()와 충돌해 즉시 반환된다. 따라서 pyobjc로 NSStatusItem을
+    # 메인 스레드에서 만들어 pywebview 런루프가 함께 구동하게 한다.
+    from s3manager.shell.tray import create_status_item
+
+    # GC 방지: 메뉴바 객체 참조를 살려둔다
+    _tray_refs = create_status_item(show_window=show_window, quit_app=quit_app)
+
+    # ---------------------------------------------------------------- #
+    #  6. pywebview 메인 루프 (메인 스레드 — macOS 필수)                  #
+    # ---------------------------------------------------------------- #
+
+    # closing 이벤트 연결 (pywebview 5.x API)
+    window.events.closing += on_closing
+
+    webview.start()  # 메인 NSApp 런루프 구동 (메뉴바 아이콘도 함께 동작)
+
+    # 참조 유지 (린터의 미사용 변수 경고 방지 겸)
+    del _tray_refs
+
+    # webview.start() 가 반환된 후 (quit_app 에서 destroy 호출됨)
+    print("[S3 Manager] 앱 종료.")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,163 @@
+// API 클라이언트 — /api 엔드포인트 래퍼
+
+import type { Profile, Job } from '../types'
+
+const BASE = '/api'
+
+// ── 로컬 접근 토큰 ───────────────────────────────────────────────────────────
+// 셸(pywebview)이 창 URL(?t=)로만 토큰을 전달한다. 부팅 시 1회 읽어 메모리에 보관하고
+// URL에서 즉시 제거(주소창/히스토리 노출 방지)한다. 이후 모든 요청 헤더에 실어 보낸다.
+function readToken(): string {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('t')
+    if (t) {
+      params.delete('t')
+      const qs = params.toString()
+      const clean = window.location.pathname + (qs ? `?${qs}` : '')
+      window.history.replaceState({}, '', clean)
+      return t
+    }
+  } catch {
+    // ignore
+  }
+  return ''
+}
+
+export const AUTH_TOKEN = readToken()
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (body) headers['Content-Type'] = 'application/json'
+  if (AUTH_TOKEN) headers['X-S3M-Token'] = AUTH_TOKEN
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try {
+      const json = await res.json()
+      msg = json.error || json.detail || msg
+    } catch {
+      // ignore
+    }
+    throw new Error(msg)
+  }
+  return res.json() as Promise<T>
+}
+
+// ── 자격증명 / 연결 ──────────────────────────────────────────────────────────
+
+export const getProfiles = () =>
+  request<{ profiles: Profile[] }>('GET', '/profiles')
+
+export const saveCredentials = (data: {
+  name: string
+  accessKeyId: string
+  secretAccessKey: string
+  region: string
+}) => request<{ ok: true }>('POST', '/credentials', data)
+
+export const deleteCredentials = (name: string) =>
+  request<{ ok: true }>('DELETE', `/credentials/${encodeURIComponent(name)}`)
+
+export const connect = (
+  body:
+    | { mode: 'keys'; accessKeyId: string; secretAccessKey: string; region: string }
+    | { mode: 'profile'; profileName: string; region?: string },
+) =>
+  request<
+    | { ok: true; identity: { account: string; arn: string }; region: string }
+    | { ok: false; error: string }
+  >('POST', '/connect', body)
+
+export const getConnection = () =>
+  request<{
+    connected: boolean
+    identity?: { account: string; arn: string }
+    region?: string
+  }>('GET', '/connection')
+
+// ── 탐색 ────────────────────────────────────────────────────────────────────
+
+export const getBuckets = () =>
+  request<{ buckets: { name: string; region: string | null }[] }>('GET', '/buckets')
+
+export const getObjects = (bucket: string, prefix?: string) => {
+  const params = new URLSearchParams({ bucket })
+  if (prefix) params.set('prefix', prefix)
+  return request<{
+    prefix: string
+    folders: import('../types').S3Folder[]
+    objects: import('../types').S3Object[]
+  }>('GET', `/objects?${params}`)
+}
+
+export const getFlatObjects = (bucket: string, prefix?: string) => {
+  const params = new URLSearchParams({ bucket })
+  if (prefix) params.set('prefix', prefix)
+  return request<{ totalFiles: number; totalBytes: number }>(
+    'GET',
+    `/objects/flat?${params}`,
+  )
+}
+
+// ── 전송 작업 ────────────────────────────────────────────────────────────────
+
+export const startDownload = (body: {
+  bucket: string
+  prefix?: string
+  keys?: string[]
+  localDir: string
+  maxWorkers?: number
+}) => request<{ jobId: string }>('POST', '/download', body)
+
+export const startUpload = (body: {
+  bucket: string
+  prefix: string
+  localPaths: string[]
+  maxWorkers?: number
+}) => request<{ jobId: string }>('POST', '/upload', body)
+
+export const startSync = (body: {
+  direction: 'down' | 'up'
+  bucket: string
+  prefix: string
+  localDir: string
+  maxWorkers?: number
+}) => request<{ jobId: string }>('POST', '/sync', body)
+
+export const getJobs = () => request<{ jobs: Job[] }>('GET', '/jobs')
+
+export const getJob = (jobId: string) => request<Job>('GET', `/jobs/${jobId}`)
+
+export const cancelJob = (jobId: string) =>
+  request<{ ok: true }>('POST', `/jobs/${jobId}/cancel`)
+
+// ── 로컬 / 시스템 ─────────────────────────────────────────────────────────────
+
+export const pickFolder = () =>
+  request<{ path: string | null }>('POST', '/pick-folder')
+
+export const pickFiles = () =>
+  request<{ paths: string[] }>('POST', '/pick-files')
+
+export const revealInFinder = (path: string) =>
+  request<{ ok: boolean }>('POST', '/reveal', { path })
+
+export const getHealth = () =>
+  request<{ ok: true; version: string }>('GET', '/health')
+
+// ── 환경설정 ──────────────────────────────────────────────────────────────────
+
+export const getPreferences = () =>
+  request<{ hiddenBuckets: string[] }>('GET', '/preferences')
+
+export const setHiddenBuckets = (hiddenBuckets: string[]) =>
+  request<{ hiddenBuckets: string[] }>('PUT', '/preferences/hidden-buckets', { hiddenBuckets })

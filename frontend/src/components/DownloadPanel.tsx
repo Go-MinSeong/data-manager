@@ -1,0 +1,193 @@
+import { useState } from 'react'
+import { FolderOpen, Download, Info } from 'lucide-react'
+import * as api from '../lib/api'
+import { useJob } from '../hooks/useJob'
+import { useAppStore } from '../store/appStore'
+import { JobProgress } from './JobProgress'
+import { formatBytes } from './ProgressBar'
+
+interface DownloadPanelProps {
+  checkedKeys: Set<string>
+}
+
+export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
+  const { state, dispatch } = useAppStore()
+  const [localDir, setLocalDir] = useState('')
+  const [maxWorkers, setMaxWorkers] = useState(4)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{ totalFiles: number; totalBytes: number } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const { state: jobState, close: closeJob } = useJob(jobId)
+
+  const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
+    dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
+  }
+
+  const handlePickFolder = async () => {
+    try {
+      const res = await api.pickFolder()
+      if (res.path) setLocalDir(res.path)
+    } catch {
+      toast('폴더 선택 실패 (네이티브 앱에서 지원)')
+    }
+  }
+
+  const handlePreview = async () => {
+    if (!state.selectedBucket || checkedKeys.size === 0) {
+      toast('버킷과 다운로드 대상을 선택하세요.')
+      return
+    }
+    setPreviewLoading(true)
+    try {
+      // 첫 번째 체크된 키로 미리보기 (prefix 또는 key)
+      const first = [...checkedKeys][0]
+      const isFolder = first.endsWith('/')
+      const res = await api.getFlatObjects(
+        state.selectedBucket,
+        isFolder ? first : undefined,
+      )
+      setPreview(res)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '미리보기 실패')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handleDownload = async () => {
+    if (!state.selectedBucket) {
+      toast('버킷을 선택하세요.')
+      return
+    }
+    if (!localDir) {
+      toast('저장 경로를 입력하세요.')
+      return
+    }
+    if (checkedKeys.size === 0) {
+      toast('다운로드할 항목을 선택하세요.')
+      return
+    }
+
+    // prefix / keys 분리
+    const prefixes = [...checkedKeys].filter(k => k.endsWith('/'))
+    const keys = [...checkedKeys].filter(k => !k.endsWith('/'))
+
+    closeJob()
+    setJobId(null)
+
+    try {
+      const res = await api.startDownload({
+        bucket: state.selectedBucket,
+        prefix: prefixes.length > 0 ? prefixes[0] : undefined,
+        keys: keys.length > 0 ? keys : undefined,
+        localDir,
+        maxWorkers,
+      })
+      setJobId(res.jobId)
+      toast('다운로드를 시작했습니다.', 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '다운로드 시작 실패')
+    }
+  }
+
+  const isRunning = jobId && !jobState.done && !jobState.error && !jobState.canceled
+
+  return (
+    <div className="p-5 space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-200 mb-3">다운로드</h3>
+
+        {/* 선택된 항목 */}
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-zinc-400">선택된 항목</span>
+            <button
+              onClick={handlePreview}
+              disabled={previewLoading || checkedKeys.size === 0 || !state.selectedBucket}
+              className="text-xs text-blue-400 hover:text-blue-300 disabled:text-zinc-600 transition-colors flex items-center gap-1"
+            >
+              <Info size={11} />
+              {previewLoading ? '계산 중...' : '크기 확인'}
+            </button>
+          </div>
+          {checkedKeys.size === 0 ? (
+            <p className="text-xs text-zinc-600">왼쪽 트리에서 파일/폴더를 선택하세요</p>
+          ) : (
+            <div className="space-y-0.5">
+              {[...checkedKeys].slice(0, 5).map(k => (
+                <p key={k} className="text-xs text-zinc-300 font-mono truncate">{k}</p>
+              ))}
+              {checkedKeys.size > 5 && (
+                <p className="text-xs text-zinc-500">... 외 {checkedKeys.size - 5}개</p>
+              )}
+            </div>
+          )}
+          {preview && (
+            <div className="mt-2 pt-2 border-t border-zinc-700 flex gap-4 text-xs text-zinc-400">
+              <span><span className="text-zinc-200">{preview.totalFiles}</span>개 파일</span>
+              <span><span className="text-zinc-200">{formatBytes(preview.totalBytes)}</span></span>
+            </div>
+          )}
+        </div>
+
+        {/* 저장 경로 */}
+        <div className="mb-4">
+          <label className="text-xs text-zinc-400 mb-1 block">저장 경로</label>
+          <div className="flex gap-2">
+            <input
+              value={localDir}
+              onChange={e => setLocalDir(e.target.value)}
+              placeholder="/Users/me/Downloads"
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={handlePickFolder}
+              className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors"
+              title="폴더 선택"
+            >
+              <FolderOpen size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* 동시 다운로드 수 */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs text-zinc-400">동시 다운로드 수</label>
+            <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={16}
+            value={maxWorkers}
+            onChange={e => setMaxWorkers(Number(e.target.value))}
+            className="w-full accent-blue-500"
+          />
+          <div className="flex justify-between text-[10px] text-zinc-600 mt-0.5">
+            <span>1</span><span>16</span>
+          </div>
+        </div>
+
+        {/* 다운로드 버튼 */}
+        <button
+          onClick={handleDownload}
+          disabled={!!isRunning || !state.selectedBucket || checkedKeys.size === 0}
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+        >
+          <Download size={15} />
+          다운로드 시작
+        </button>
+      </div>
+
+      {/* 진행률 */}
+      {jobId && (
+        <JobProgress
+          jobId={jobId}
+          jobState={jobState}
+          onDismiss={() => { setJobId(null); closeJob() }}
+        />
+      )}
+    </div>
+  )
+}
