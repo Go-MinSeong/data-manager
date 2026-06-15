@@ -140,14 +140,6 @@ class UploadRequest(CamelModel):
     max_workers: int = 5
 
 
-class SyncRequest(CamelModel):
-    direction: Literal["down", "up"]
-    bucket: str
-    prefix: str = ""
-    local_dir: str
-    max_workers: int = 5
-
-
 class JobIdResponse(CamelModel):
     job_id: str
 
@@ -200,6 +192,7 @@ class HealthResponse(CamelModel):
 
 class PreferencesResponse(CamelModel):
     hidden_buckets: list[str] = []
+    last_download_dir: str = ""
 
 
 class HiddenBucketsRequest(CamelModel):

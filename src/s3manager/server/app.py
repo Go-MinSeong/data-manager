@@ -44,7 +44,6 @@ from s3manager.server.models import (
     S3Folder,
     S3Object,
     SaveCredentialsRequest,
-    SyncRequest,
     UploadRequest,
 )
 
@@ -205,7 +204,10 @@ async def health() -> HealthResponse:
 @app.get("/api/preferences", response_model=PreferencesResponse)
 async def get_preferences() -> PreferencesResponse:
     """저장된 환경설정을 반환한다."""
-    return PreferencesResponse(hidden_buckets=prefs_module.get_hidden_buckets())
+    return PreferencesResponse(
+        hidden_buckets=prefs_module.get_hidden_buckets(),
+        last_download_dir=prefs_module.get_last_download_dir(),
+    )
 
 
 @app.put("/api/preferences/hidden-buckets", response_model=PreferencesResponse)
@@ -388,6 +390,8 @@ async def start_download(body: DownloadRequest) -> JobIdResponse:
     if body.prefix is None and not body.keys:
         raise HTTPException(status_code=422, detail="prefix 또는 keys 중 하나가 필요합니다.")
     client = _session.require_client()
+    # 이 경로를 "마지막 사용 다운로드 경로"로 저장 → 다음 실행 시 기본값으로 사용
+    prefs_module.set_last_download_dir(body.local_dir)
     job_id = job_manager.submit_download(
         client,
         body.bucket,
@@ -408,21 +412,6 @@ async def start_upload(body: UploadRequest) -> JobIdResponse:
         body.bucket,
         body.prefix,
         body.local_paths,
-        max_workers=body.max_workers,
-    )
-    return JobIdResponse(job_id=job_id)
-
-
-@app.post("/api/sync", response_model=JobIdResponse)
-async def start_sync(body: SyncRequest) -> JobIdResponse:
-    """동기화 잡을 생성한다."""
-    client = _session.require_client()
-    job_id = job_manager.submit_sync(
-        client,
-        body.direction,
-        body.bucket,
-        body.prefix,
-        body.local_dir,
         max_workers=body.max_workers,
     )
     return JobIdResponse(job_id=job_id)

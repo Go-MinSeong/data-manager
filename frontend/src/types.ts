@@ -79,4 +79,4 @@ export interface TreeNode {
 }
 
 // 탭
-export type PanelTab = 'download' | 'upload' | 'sync' | 'jobs'
+export type PanelTab = 'download' | 'upload' | 'jobs'

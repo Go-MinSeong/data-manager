@@ -1,15 +1,13 @@
-import { Download, Upload, RefreshCw, History } from 'lucide-react'
+import { Download, Upload, History } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { DownloadPanel } from './DownloadPanel'
 import { UploadPanel } from './UploadPanel'
-import { SyncPanel } from './SyncPanel'
 import { JobsPanel } from './JobsPanel'
 import type { PanelTab } from '../types'
 
 const TABS: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
   { id: 'download', label: '다운로드', icon: <Download size={14} /> },
   { id: 'upload', label: '업로드', icon: <Upload size={14} /> },
-  { id: 'sync', label: '동기화', icon: <RefreshCw size={14} /> },
   { id: 'jobs', label: '작업 이력', icon: <History size={14} /> },
 ]
 
@@ -42,13 +40,17 @@ export function MainPanel({ checkedKeys, onCheckedChange: _onCheckedChange }: Ma
         ))}
       </div>
 
-      {/* 패널 콘텐츠 */}
+      {/* 패널 콘텐츠
+          다운로드·업로드는 항상 마운트하고 숨김(display:none)으로 토글한다.
+          탭을 이동해도 진행 중인 전송 job 상태(버튼 비활성 등)가 유지된다.
+          작업 이력은 볼 때마다 새로 로드되도록 조건부 렌더 유지. */}
       <div className="flex-1 overflow-y-auto">
-        {state.activeTab === 'download' && (
+        <div className={state.activeTab === 'download' ? '' : 'hidden'}>
           <DownloadPanel checkedKeys={checkedKeys} />
-        )}
-        {state.activeTab === 'upload' && <UploadPanel />}
-        {state.activeTab === 'sync' && <SyncPanel />}
+        </div>
+        <div className={state.activeTab === 'upload' ? '' : 'hidden'}>
+          <UploadPanel />
+        </div>
         {state.activeTab === 'jobs' && <JobsPanel />}
       </div>
     </div>

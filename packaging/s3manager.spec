@@ -1,14 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 # S3 Manager — PyInstaller spec (macOS .app 번들)
 #
-# 빌드: uv run pyinstaller packaging/s3manager.spec
+# 빌드: bash packaging/build.sh   (권장)
 # 결과: dist/S3 Manager.app
+#
+# 아키텍처: 환경변수 S3M_ARCH 로 제어 (기본 arm64).
+#   - arm64      : Apple Silicon 전용 (현재 uv arm64 Python으로 빌드 가능)
+#   - universal2 : Intel + Apple Silicon (python.org universal2 Python 필요)
 
+import os
 import sys
 from pathlib import Path
 
 # 프로젝트 루트 (spec 파일 위치 기준 상위 디렉터리)
 PROJECT_ROOT = Path(SPECPATH).parent
+
+# 타깃 아키텍처 (기본 arm64). universal2는 universal2 Python에서만 빌드 가능.
+TARGET_ARCH = os.environ.get("S3M_ARCH", "arm64")
 
 # ------------------------------------------------------------------ #
 #  Analysis                                                            #
@@ -135,7 +143,7 @@ exe = EXE(
     console=False,   # 터미널 창 없음 (GUI 앱)
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch="arm64",   # M-시리즈 Mac; universal2 빌드 시 "universal2" 로 변경
+    target_arch=TARGET_ARCH,   # 환경변수 S3M_ARCH (기본 arm64, universal2 가능)
     codesign_identity=None,
     entitlements_file=None,
     icon=str(PROJECT_ROOT / "assets" / "app_icon.icns"),

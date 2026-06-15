@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { FolderOpen, Download, Info } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
@@ -18,6 +18,15 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
   const [preview, setPreview] = useState<{ totalFiles: number; totalBytes: number } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const { state: jobState, close: closeJob } = useJob(jobId)
+
+  // 마지막으로 사용한 다운로드 경로를 기본값으로 채운다 (없으면 ~/Downloads).
+  useEffect(() => {
+    api.getPreferences()
+      .then(p => {
+        if (p.lastDownloadDir) setLocalDir(prev => prev || p.lastDownloadDir)
+      })
+      .catch(() => { /* 무시 */ })
+  }, [])
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })

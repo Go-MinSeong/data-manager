@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from s3manager import settings
@@ -18,7 +19,11 @@ _PREFS_PATH = settings.APP_SUPPORT_DIR / "preferences.json"
 
 _DEFAULTS: dict[str, Any] = {
     "hiddenBuckets": [],
+    "lastDownloadDir": "",
 }
+
+# 마지막 다운로드 경로가 없을 때의 기본값 (~/Downloads)
+_DEFAULT_DOWNLOAD_DIR = str(Path.home() / "Downloads")
 
 
 def load_preferences() -> dict[str, Any]:
@@ -61,3 +66,18 @@ def set_hidden_buckets(names: list[str]) -> list[str]:
     prefs["hiddenBuckets"] = cleaned
     save_preferences(prefs)
     return cleaned
+
+
+def get_last_download_dir() -> str:
+    """마지막으로 사용한 다운로드 경로. 없으면 ~/Downloads."""
+    saved = load_preferences().get("lastDownloadDir") or ""
+    return saved if saved else _DEFAULT_DOWNLOAD_DIR
+
+
+def set_last_download_dir(path: str) -> None:
+    """다운로드 경로를 마지막 사용 경로로 저장한다."""
+    if not path or not path.strip():
+        return
+    prefs = load_preferences()
+    prefs["lastDownloadDir"] = path.strip()
+    save_preferences(prefs)

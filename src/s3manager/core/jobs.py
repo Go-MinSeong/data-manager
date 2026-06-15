@@ -339,50 +339,6 @@ class JobManager:
         self._executor.submit(self._run_job, job, task)
         return job.job_id
 
-    def submit_sync(
-        self,
-        s3_client,
-        direction: str,
-        bucket: str,
-        prefix: str,
-        local_dir: str,
-        *,
-        max_workers: int = 5,
-    ) -> str:
-        """동기화 잡을 생성하고 jobId를 반환한다. (삭제 기능 없음 — 변경분만 전송)"""
-        job = self._new_job("sync", local_dir=local_dir)
-
-        on_bytes, on_file = self._make_callbacks(job)
-
-        def task():
-            if direction == "down":
-                return s3_engine.sync_down(
-                    s3_client,
-                    bucket,
-                    prefix,
-                    local_dir,
-                    max_workers=max_workers,
-                    on_bytes=on_bytes,
-                    on_file=on_file,
-                    cancel_event=job._cancel_event,
-                )
-            elif direction == "up":
-                return s3_engine.sync_up(
-                    s3_client,
-                    bucket,
-                    prefix,
-                    local_dir,
-                    max_workers=max_workers,
-                    on_bytes=on_bytes,
-                    on_file=on_file,
-                    cancel_event=job._cancel_event,
-                )
-            else:
-                raise ValueError(f"알 수 없는 direction: {direction}")
-
-        self._executor.submit(self._run_job, job, task)
-        return job.job_id
-
 
 # 모듈 수준 싱글톤
 job_manager = JobManager()

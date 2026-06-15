@@ -51,15 +51,38 @@ uv run python -m uvicorn s3manager.server.app:app --port 8765 --reload
 cd frontend && npm run dev
 ```
 
-## `.app` 빌드 (배포)
+## `.app` 빌드 & 배포
 
 ```bash
 bash packaging/build.sh
-# 산출물: dist/S3 Manager.app
+# 산출물:
+#   dist/S3 Manager.app          (실행용)
+#   dist/S3-Manager-arm64.zip    ← 동료에게 전달하는 배포본
 ```
 
-빌드는 `frontend/dist` → PyInstaller(`packaging/s3manager.spec`) 순서로 진행됩니다.
-`.app`은 Apple Silicon(arm64) 전용으로 설정돼 있으며, Intel/Universal은 spec의 `target_arch`를 수정하세요.
+빌드 순서: `frontend/dist` → PyInstaller(`packaging/s3manager.spec`) → ad-hoc 코드서명 → 배포용 zip(ditto).
+
+### 다른 사람에게 배포
+1. `bash packaging/build.sh` 로 zip 생성.
+2. `dist/S3-Manager-<arch>.zip` 을 동료에게 전달.
+3. 받는 사람은 [`INSTALL.md`](INSTALL.md) 따라 설치(압축 해제 → /Applications → 첫 실행 우클릭 "열기").
+
+> ad-hoc 서명만 하므로 받는 쪽에서 첫 실행 시 Gatekeeper 경고가 뜬다(우클릭 열기 또는 `xattr -dr com.apple.quarantine`로 해결 — INSTALL.md 참고). 경고를 완전히 없애려면 Apple Developer ID 서명 + 공증(notarize)이 필요하다(유료 계정).
+
+### 아키텍처 (arm64 / universal2)
+기본은 **arm64(Apple Silicon 전용)**. Intel까지 지원하는 **universal2**는 인터프리터가 universal2여야 빌드된다 — uv/brew의 Python은 arm64 전용이라 불가. universal2 빌드 절차:
+
+```bash
+# 1) python.org universal2 Python 3.12 설치 (관리자 권한)
+#    https://www.python.org/downloads/macos/  (macOS 64-bit universal2 installer)
+# 2) 그 Python으로 venv 재생성 + 의존성 설치 (대부분 universal2 휠 제공)
+/Library/Frameworks/Python.framework/Versions/3.12/bin/python3 -m venv .venv
+.venv/bin/pip install -e . pyinstaller
+# 3) universal2로 빌드
+S3M_ARCH=universal2 bash packaging/build.sh   # → dist/S3-Manager-universal2.zip
+```
+
+> ⚠️ 프로젝트 이동/venv 재생성 후에는 반드시 `.venv`를 다시 만들 것. 콘솔스크립트(예: pyinstaller) shebang이 옛 경로를 가리켜 깨진다.
 
 ## 주요 기능
 

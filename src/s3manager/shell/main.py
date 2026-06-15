@@ -116,15 +116,21 @@ def main() -> None:
     _window_visible = [True]  # mutable 참조 (closure 용)
 
     def show_window() -> None:
-        """트레이에서 창 보이기."""
+        """메뉴바에서 창 보이기 + 앞으로 가져오기.
+
+        앱이 Accessory(Dock 미표시) 모드라 창을 띄워도 자동으로 활성화되지 않는다.
+        따라서 show() 후 NSApp을 명시적으로 activate 해야 창이 앞으로 온다.
+        (메뉴 액션은 메인 스레드에서 호출되므로 AppKit 직접 호출이 안전하다.)
+        """
         try:
-            if not _window_visible[0]:
-                window.show()
-                _window_visible[0] = True
-            else:
-                # 이미 보이면 앞으로 가져오기
-                window.on_top = True
-                window.on_top = False
+            window.show()
+            _window_visible[0] = True
+        except Exception:
+            pass
+        try:
+            import AppKit
+
+            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
         except Exception:
             pass
 
@@ -175,7 +181,26 @@ def main() -> None:
     # closing 이벤트 연결 (pywebview 5.x API)
     window.events.closing += on_closing
 
-    webview.start()  # 메인 NSApp 런루프 구동 (메뉴바 아이콘도 함께 동작)
+    def _hide_from_dock() -> None:
+        """Dock 아이콘 숨기기 (메뉴바 전용 앱).
+
+        pywebview의 cocoa 백엔드가 import 시 ActivationPolicy를 Regular(0)로 강제해
+        LSUIElement 설정을 덮어쓴다. 런루프 시작 직후 메인 스레드에서 Accessory(1)로
+        되돌려 Dock에서 숨기되 메뉴바 상주·창 표시는 유지한다.
+        webview.start(func)로 등록되며 별도 스레드에서 호출되므로 메인 큐로 디스패치한다.
+        """
+        try:
+            import AppKit
+
+            def _set() -> None:
+                AppKit.NSApplication.sharedApplication().setActivationPolicy_(1)  # Accessory
+
+            AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(_set)
+        except Exception:
+            pass
+
+    # func은 런루프 시작 후 호출됨 → 거기서 Dock 숨김 처리
+    webview.start(_hide_from_dock)  # 메인 NSApp 런루프 구동 (메뉴바 아이콘도 함께 동작)
 
     # 참조 유지 (린터의 미사용 변수 경고 방지 겸)
     del _tray_refs

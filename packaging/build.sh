@@ -95,31 +95,51 @@ fi
 #  3. PyInstaller 빌드                                                  #
 # ------------------------------------------------------------------ #
 echo ""
-echo "--- [3/3] PyInstaller 빌드 ---"
+echo "--- [3/4] PyInstaller 빌드 ---"
 
-# 이전 빌드 정리 (선택)
-if [ -d "dist/S3 Manager.app" ]; then
-    echo "기존 dist/S3 Manager.app 삭제 중..."
-    rm -rf "dist/S3 Manager.app"
-fi
+# 아키텍처 (기본 arm64). universal2는 python.org universal2 Python에서만 가능:
+#   S3M_ARCH=universal2 bash packaging/build.sh
+ARCH="${S3M_ARCH:-arm64}"
+echo "타깃 아키텍처: ${ARCH}"
 
-uv run pyinstaller packaging/s3manager.spec \
-    --noconfirm \
-    --clean
-
-if [ -d "dist/S3 Manager.app" ]; then
-    echo ""
-    echo "=== 빌드 성공 ==="
-    echo "결과물: ${PROJECT_ROOT}/dist/S3 Manager.app"
-    echo ""
-    echo "실행 방법:"
-    echo "  open '${PROJECT_ROOT}/dist/S3 Manager.app'"
-    echo ""
-    echo "또는 Applications 폴더로 복사:"
-    echo "  cp -r 'dist/S3 Manager.app' /Applications/"
-else
-    echo ""
-    echo "=== 빌드 실패 ==="
-    echo "dist/S3 Manager.app 이 생성되지 않았습니다."
+# pyinstaller 보장: 'uv run pyinstaller'는 실행 직전 venv를 동기화하며
+# (base 의존성이 아닌) pyinstaller를 제거한다. 따라서 venv에 설치 후
+# venv의 pyinstaller 바이너리를 직접 호출한다.
+uv pip install pyinstaller >/dev/null 2>&1 || true
+PYI="${PROJECT_ROOT}/.venv/bin/pyinstaller"
+if [ ! -x "${PYI}" ]; then
+    echo "오류: ${PYI} 가 없습니다. 'uv venv --python 3.12 && uv pip install -e . pyinstaller' 후 재시도."
     exit 1
 fi
+
+rm -rf build dist
+S3M_ARCH="${ARCH}" "${PYI}" packaging/s3manager.spec --noconfirm --clean
+
+if [ ! -d "dist/S3 Manager.app" ]; then
+    echo ""
+    echo "=== 빌드 실패 ==="
+    exit 1
+fi
+
+# ------------------------------------------------------------------ #
+#  4. 코드서명(ad-hoc) + 배포용 zip                                     #
+# ------------------------------------------------------------------ #
+echo ""
+echo "--- [4/4] 서명 + 패키징 ---"
+
+# ad-hoc 서명: 서명 없는 .app은 일부 환경에서 "손상됨"으로 실행이 막힌다.
+# (정식 Developer ID 서명/공증이 아니므로 다운로드본은 여전히 Gatekeeper 경고 → INSTALL.md)
+codesign --force --deep --sign - "dist/S3 Manager.app" 2>/dev/null \
+    && echo "ad-hoc 서명 완료" || echo "경고: codesign 실패(서명 없이 진행)"
+
+# 배포용 zip (ditto로 번들 메타데이터/심볼릭링크 보존)
+ZIP="dist/S3-Manager-${ARCH}.zip"
+rm -f "${ZIP}"
+ditto -c -k --sequesterRsrc --keepParent "dist/S3 Manager.app" "${ZIP}"
+
+echo ""
+echo "=== 빌드 성공 ==="
+echo "  앱:  ${PROJECT_ROOT}/dist/S3 Manager.app"
+echo "  zip: ${PROJECT_ROOT}/${ZIP}   ← 이 파일을 동료에게 전달"
+echo ""
+echo "받는 사람 설치: INSTALL.md 참고 (압축 해제 → /Applications 이동 → 첫 실행 시 우클릭 '열기')"

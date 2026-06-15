@@ -125,14 +125,6 @@ export const startUpload = (body: {
   maxWorkers?: number
 }) => request<{ jobId: string }>('POST', '/upload', body)
 
-export const startSync = (body: {
-  direction: 'down' | 'up'
-  bucket: string
-  prefix: string
-  localDir: string
-  maxWorkers?: number
-}) => request<{ jobId: string }>('POST', '/sync', body)
-
 export const getJobs = () => request<{ jobs: Job[] }>('GET', '/jobs')
 
 export const getJob = (jobId: string) => request<Job>('GET', `/jobs/${jobId}`)
@@ -157,7 +149,7 @@ export const getHealth = () =>
 // ── 환경설정 ──────────────────────────────────────────────────────────────────
 
 export const getPreferences = () =>
-  request<{ hiddenBuckets: string[] }>('GET', '/preferences')
+  request<{ hiddenBuckets: string[]; lastDownloadDir: string }>('GET', '/preferences')
 
 export const setHiddenBuckets = (hiddenBuckets: string[]) =>
   request<{ hiddenBuckets: string[] }>('PUT', '/preferences/hidden-buckets', { hiddenBuckets })
