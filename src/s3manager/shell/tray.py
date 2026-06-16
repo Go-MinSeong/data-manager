@@ -80,7 +80,7 @@ def create_status_item(
         image.setSize_(AppKit.NSMakeSize(target_h * aspect, target_h))
         status_item.button().setImage_(image)
     else:
-        status_item.button().setTitle_("S3")
+        status_item.button().setTitle_("DATA")
 
     status_item.button().setToolTip_(settings.APP_NAME)
 
