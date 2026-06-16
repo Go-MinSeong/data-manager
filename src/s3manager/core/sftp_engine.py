@@ -13,9 +13,10 @@ from __future__ import annotations
 import logging
 import os
 import posixpath
+import queue
 import stat
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -77,9 +78,25 @@ def connect(
     return client
 
 
+def _open_sftp_retry(
+    ssh: paramiko.SSHClient, attempts: int = 3, delay: float = 0.5
+) -> paramiko.SFTPClient:
+    """SFTP 채널을 연다. 일시적 채널 거부(MaxSessions 등)에 대비해 재시도한다."""
+    last: Exception | None = None
+    for i in range(attempts):
+        try:
+            return ssh.open_sftp()
+        except Exception as exc:  # ChannelException 포함
+            last = exc
+            if i < attempts - 1:
+                time.sleep(delay)
+    assert last is not None
+    raise last
+
+
 def home_dir(ssh: paramiko.SSHClient) -> str:
     """원격 홈 디렉터리(또는 현재 작업 디렉터리)의 절대 경로를 반환한다."""
-    sftp = ssh.open_sftp()
+    sftp = _open_sftp_retry(ssh)
     try:
         return sftp.normalize(".")
     finally:
@@ -105,7 +122,7 @@ def list_one_level(ssh: paramiko.SSHClient, path: str = "") -> dict[str, list]:
         {"folders": [{"key", "name", "isFolder": True}, ...],
          "objects": [{"key", "size", "lastModified", "isFolder": False}, ...]}
     """
-    sftp = ssh.open_sftp()
+    sftp = _open_sftp_retry(ssh)
     try:
         base = sftp.normalize(path) if path else sftp.normalize(".")
         entries = sftp.listdir_attr(base)
@@ -144,7 +161,7 @@ def list_all_files(ssh: paramiko.SSHClient, remote_dir: str) -> list[dict]:
     Returns:
         [{"key": 절대경로, "size": N, "lastModified": "ISO", "isFolder": False}, ...]
     """
-    sftp = ssh.open_sftp()
+    sftp = _open_sftp_retry(ssh)
     results: list[dict] = []
     try:
         base = sftp.normalize(remote_dir)
@@ -203,31 +220,99 @@ class _IncrementalCallback:
 
 
 # ---------------------------------------------------------------------------
+# 채널 풀 기반 병렬 실행
+# ---------------------------------------------------------------------------
+# 파일마다 SFTP 채널을 새로 열면 원격 sshd의 세션 한도(MaxSessions, 기본 10)에
+# 부딪혀 ChannelException('Connect failed')이 난다. 따라서 워커 수만큼 채널을
+# 한 번만 열어 재사용하고, 각 워커 스레드가 자기 채널로 작업 큐를 비운다.
+
+def _run_with_channel_pool(
+    ssh: paramiko.SSHClient,
+    work: list[tuple[str, tuple]],
+    op: Callable[[paramiko.SFTPClient, tuple], bool],
+    max_workers: int,
+    on_file: FileCallback | None,
+    cancel_event: threading.Event | None,
+) -> tuple[int, int]:
+    """work의 각 항목을 op(sftp, payload)로 처리한다.
+
+    Args:
+        work: [(key, payload), ...] — key는 진행률/로그 표기용.
+        op:   (sftp, payload) -> 성공 여부. 채널은 워커가 재사용해 넘겨준다.
+    """
+    n = max(1, min(max_workers, len(work)))
+    channels: list[paramiko.SFTPClient] = []
+    for _ in range(n):
+        try:
+            channels.append(_open_sftp_retry(ssh))
+        except Exception as exc:
+            logger.warning("SFTP 채널 확보 실패(%d/%d): %s", len(channels), n, exc)
+            break
+    if not channels:
+        # 최소 1개는 필수 — 못 열면 예외를 올려 잡을 error 처리한다.
+        channels.append(_open_sftp_retry(ssh))
+    logger.info("SFTP 채널 %d개로 %d개 항목 전송", len(channels), len(work))
+
+    work_q: queue.Queue = queue.Queue()
+    for item in work:
+        work_q.put(item)
+
+    counts = {"success": 0, "failure": 0}
+    lock = threading.Lock()
+
+    def worker(sftp: paramiko.SFTPClient) -> None:
+        while True:
+            if cancel_event and cancel_event.is_set():
+                return
+            try:
+                key, payload = work_q.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                ok = bool(op(sftp, payload))
+                err = None if ok else "전송 실패"
+            except Exception as exc:
+                logger.error("전송 실패 (%s): %s", key, exc)
+                ok = False
+                err = str(exc)
+            with lock:
+                counts["success" if ok else "failure"] += 1
+            if on_file:
+                on_file(key, ok, err)
+
+    threads = [threading.Thread(target=worker, args=(c,), daemon=True) for c in channels]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for c in channels:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+    return counts["success"], counts["failure"]
+
+
+# ---------------------------------------------------------------------------
 # 다운로드 (원격 → 로컬)
 # ---------------------------------------------------------------------------
 
-def download_single(
-    ssh: paramiko.SSHClient,
+def _download_one(
+    sftp: paramiko.SFTPClient,
     remote_path: str,
     local_path: str,
-    on_bytes: BytesCallback | None = None,
-    cancel_event: threading.Event | None = None,
+    on_bytes: BytesCallback | None,
+    cancel_event: threading.Event | None,
 ) -> bool:
-    """단일 원격 파일을 로컬 경로로 다운로드한다. 워커별 SFTP 채널을 새로 연다."""
+    """주어진 SFTP 채널로 단일 원격 파일을 로컬로 받는다(채널은 재사용)."""
     if cancel_event and cancel_event.is_set():
         return False
-    sftp = ssh.open_sftp()
-    try:
-        local = Path(local_path)
-        local.parent.mkdir(parents=True, exist_ok=True)
-        callback = _IncrementalCallback(on_bytes) if on_bytes else None
-        sftp.get(remote_path, str(local), callback=callback)
-        return True
-    except Exception as exc:
-        logger.error("다운로드 실패 (%s): %s", remote_path, exc)
-        return False
-    finally:
-        sftp.close()
+    local = Path(local_path)
+    local.parent.mkdir(parents=True, exist_ok=True)
+    callback = _IncrementalCallback(on_bytes) if on_bytes else None
+    sftp.get(remote_path, str(local), callback=callback)
+    return True
 
 
 def download_files(
@@ -267,36 +352,16 @@ def download_files(
     if not targets:
         return 0, 0
 
-    success = 0
-    failure = 0
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_key: dict[Future, str] = {}
-        for remote_path, rel in targets:
-            if cancel_event and cancel_event.is_set():
-                break
-            local_path = os.path.join(local_dir, *rel.split("/"))
-            fut = executor.submit(
-                download_single, ssh, remote_path, local_path, on_bytes, cancel_event
-            )
-            future_to_key[fut] = remote_path
+    work: list[tuple[str, tuple]] = []
+    for remote_path, rel in targets:
+        local_path = os.path.join(local_dir, *rel.split("/"))
+        work.append((remote_path, (remote_path, local_path)))
 
-        for fut in as_completed(future_to_key):
-            remote_path = future_to_key[fut]
-            try:
-                ok = fut.result()
-            except Exception as exc:
-                logger.error("다운로드 future 예외 (%s): %s", remote_path, exc)
-                ok = False
-            if ok:
-                success += 1
-                if on_file:
-                    on_file(remote_path, True, None)
-            else:
-                failure += 1
-                if on_file:
-                    on_file(remote_path, False, "다운로드 실패")
+    def op(sftp: paramiko.SFTPClient, payload: tuple) -> bool:
+        rp, lp = payload
+        return _download_one(sftp, rp, lp, on_bytes, cancel_event)
 
-    return success, failure
+    return _run_with_channel_pool(ssh, work, op, max_workers, on_file, cancel_event)
 
 
 # ---------------------------------------------------------------------------
@@ -336,29 +401,22 @@ def _sftp_makedirs(sftp: paramiko.SFTPClient, remote_dir: str) -> None:
                 pass  # 경쟁 조건으로 이미 생성됐을 수 있음
 
 
-def upload_single(
-    ssh: paramiko.SSHClient,
+def _upload_one(
+    sftp: paramiko.SFTPClient,
     local_file: Path,
     remote_path: str,
-    on_bytes: BytesCallback | None = None,
-    cancel_event: threading.Event | None = None,
+    on_bytes: BytesCallback | None,
+    cancel_event: threading.Event | None,
 ) -> bool:
-    """단일 로컬 파일을 원격 경로로 업로드한다. 워커별 SFTP 채널을 새로 연다."""
+    """주어진 SFTP 채널로 단일 로컬 파일을 원격에 올린다(채널은 재사용)."""
     if cancel_event and cancel_event.is_set():
         return False
-    sftp = ssh.open_sftp()
-    try:
-        parent = posixpath.dirname(remote_path)
-        if parent:
-            _sftp_makedirs(sftp, parent)
-        callback = _IncrementalCallback(on_bytes) if on_bytes else None
-        sftp.put(str(local_file), remote_path, callback=callback)
-        return True
-    except Exception as exc:
-        logger.error("업로드 실패 (%s): %s", remote_path, exc)
-        return False
-    finally:
-        sftp.close()
+    parent = posixpath.dirname(remote_path)
+    if parent:
+        _sftp_makedirs(sftp, parent)
+    callback = _IncrementalCallback(on_bytes) if on_bytes else None
+    sftp.put(str(local_file), remote_path, callback=callback)
+    return True
 
 
 def upload_files(
@@ -380,36 +438,15 @@ def upload_files(
     if not file_pairs:
         return 0, 0
 
-    success = 0
-    failure = 0
     remote_base = remote_dir.rstrip("/")
+    work: list[tuple[str, tuple]] = []
+    for local_file, base_parent in file_pairs:
+        rel = local_file.relative_to(base_parent).as_posix()
+        remote_path = posixpath.join(remote_base, rel) if remote_base else rel
+        work.append((remote_path, (local_file, remote_path)))
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_key: dict[Future, str] = {}
-        for local_file, base_parent in file_pairs:
-            if cancel_event and cancel_event.is_set():
-                break
-            rel = local_file.relative_to(base_parent).as_posix()
-            remote_path = posixpath.join(remote_base, rel) if remote_base else rel
-            fut = executor.submit(
-                upload_single, ssh, local_file, remote_path, on_bytes, cancel_event
-            )
-            future_to_key[fut] = remote_path
+    def op(sftp: paramiko.SFTPClient, payload: tuple) -> bool:
+        lf, rp = payload
+        return _upload_one(sftp, lf, rp, on_bytes, cancel_event)
 
-        for fut in as_completed(future_to_key):
-            remote_path = future_to_key[fut]
-            try:
-                ok = fut.result()
-            except Exception as exc:
-                logger.error("업로드 future 예외 (%s): %s", remote_path, exc)
-                ok = False
-            if ok:
-                success += 1
-                if on_file:
-                    on_file(remote_path, True, None)
-            else:
-                failure += 1
-                if on_file:
-                    on_file(remote_path, False, "업로드 실패")
-
-    return success, failure
+    return _run_with_channel_pool(ssh, work, op, max_workers, on_file, cancel_event)
