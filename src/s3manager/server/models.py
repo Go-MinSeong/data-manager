@@ -127,7 +127,7 @@ class FlatSummaryResponse(CamelModel):
 
 class DownloadRequest(CamelModel):
     bucket: str
-    prefix: str | None = None
+    prefixes: list[str] | None = None
     keys: list[str] | None = None
     local_dir: str
     max_workers: int = 5
@@ -207,7 +207,7 @@ class RemoteConnectionStatusResponse(CamelModel):
 
 
 class RemoteDownloadRequest(CamelModel):
-    remote_dir: str | None = None
+    remote_dirs: list[str] | None = None
     keys: list[str] | None = None
     local_dir: str
     max_workers: int = 4

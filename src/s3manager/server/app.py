@@ -438,9 +438,9 @@ async def list_objects(bucket: str, prefix: str = "") -> ObjectsResponse:
 
 @app.post("/api/download", response_model=JobIdResponse)
 async def start_download(body: DownloadRequest) -> JobIdResponse:
-    """다운로드 잡을 생성한다. prefix 또는 keys 중 하나 필수."""
-    if body.prefix is None and not body.keys:
-        raise HTTPException(status_code=422, detail="prefix 또는 keys 중 하나가 필요합니다.")
+    """다운로드 잡을 생성한다. prefixes 또는 keys 중 하나 필수."""
+    if not body.prefixes and not body.keys:
+        raise HTTPException(status_code=422, detail="prefixes 또는 keys 중 하나가 필요합니다.")
     client = _session.require_client()
     # 이 경로를 "마지막 사용 다운로드 경로"로 저장 → 다음 실행 시 기본값으로 사용
     prefs_module.set_last_download_dir(body.local_dir)
@@ -448,7 +448,7 @@ async def start_download(body: DownloadRequest) -> JobIdResponse:
         client,
         body.bucket,
         body.local_dir,
-        prefix=body.prefix,
+        prefixes=body.prefixes,
         keys=body.keys,
         max_workers=body.max_workers,
     )
@@ -637,15 +637,15 @@ async def list_remote_objects(path: str = "") -> ObjectsResponse:
 
 @app.post("/api/remote/download", response_model=JobIdResponse)
 async def start_remote_download(body: RemoteDownloadRequest) -> JobIdResponse:
-    """원격 → 로컬 다운로드 잡을 생성한다. remoteDir 또는 keys 중 하나 필수."""
-    if body.remote_dir is None and not body.keys:
-        raise HTTPException(status_code=422, detail="remoteDir 또는 keys 중 하나가 필요합니다.")
+    """원격 → 로컬 다운로드 잡을 생성한다. remoteDirs 또는 keys 중 하나 필수."""
+    if not body.remote_dirs and not body.keys:
+        raise HTTPException(status_code=422, detail="remoteDirs 또는 keys 중 하나가 필요합니다.")
     ssh = _remote.require_ssh()
     prefs_module.set_last_download_dir(body.local_dir)
     job_id = job_manager.submit_remote_download(
         ssh,
         body.local_dir,
-        remote_dir=body.remote_dir,
+        remote_dirs=body.remote_dirs,
         keys=body.keys,
         max_workers=body.max_workers,
     )

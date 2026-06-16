@@ -201,21 +201,33 @@ def flat_summary(ssh: paramiko.SSHClient, remote_dir: str) -> dict[str, int]:
 # 진행률 콜백 어댑터
 # ---------------------------------------------------------------------------
 
+class TransferCanceled(Exception):
+    """전송 콜백에서 취소가 감지되면 발생 — 진행 중 파일을 즉시 중단시킨다."""
+
+
 class _IncrementalCallback:
-    """paramiko의 누적(cumulative) 진행 콜백을 증분(delta) 콜백으로 변환한다.
+    """paramiko의 누적(cumulative) 진행 콜백을 증분(delta) 콜백으로 변환하고 취소를 감지한다.
 
     paramiko get/put 콜백은 파일별로 (transferred, total) 누적값을 전달하므로,
     파일 1건당 인스턴스 1개를 사용해 직전 값과의 차이를 외부 on_bytes로 보낸다.
+    전송 중 취소되면 예외를 던져 get/put을 즉시 중단시킨다(큰 파일도 중간에 멈춤).
     """
 
-    def __init__(self, on_bytes: BytesCallback) -> None:
+    def __init__(
+        self,
+        on_bytes: BytesCallback | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> None:
         self._on_bytes = on_bytes
+        self._cancel_event = cancel_event
         self._last = 0
 
     def __call__(self, transferred: int, total: int) -> None:
+        if self._cancel_event is not None and self._cancel_event.is_set():
+            raise TransferCanceled()
         delta = transferred - self._last
         self._last = transferred
-        if delta > 0:
+        if delta > 0 and self._on_bytes is not None:
             self._on_bytes(delta)
 
 
@@ -271,6 +283,9 @@ def _run_with_channel_pool(
             try:
                 ok = bool(op(sftp, payload))
                 err = None if ok else "전송 실패"
+            except TransferCanceled:
+                logger.debug("전송 취소됨 (%s)", key)
+                return  # 취소 시 이 워커는 남은 작업을 처리하지 않고 종료
             except Exception as exc:
                 logger.error("전송 실패 (%s): %s", key, exc)
                 ok = False
@@ -310,7 +325,7 @@ def _download_one(
         return False
     local = Path(local_path)
     local.parent.mkdir(parents=True, exist_ok=True)
-    callback = _IncrementalCallback(on_bytes) if on_bytes else None
+    callback = _IncrementalCallback(on_bytes, cancel_event)
     sftp.get(remote_path, str(local), callback=callback)
     return True
 
@@ -319,35 +334,35 @@ def download_files(
     ssh: paramiko.SSHClient,
     local_dir: str,
     *,
-    remote_dir: str | None = None,
+    remote_dirs: list[str] | None = None,
     keys: list[str] | None = None,
     max_workers: int = 4,
     on_bytes: BytesCallback | None = None,
     on_file: FileCallback | None = None,
     cancel_event: threading.Event | None = None,
 ) -> tuple[int, int]:
-    """remote_dir(재귀) 또는 keys(파일 목록)를 로컬 디렉터리로 다운로드한다.
+    """여러 원격 폴더(재귀) + 파일을 로컬 디렉터리로 다운로드한다.
 
-    - remote_dir 모드: 하위 구조를 보존하며 local_dir 아래로 받는다.
-    - keys 모드: 각 파일을 local_dir/<파일명>으로 받는다(평면).
+    - 각 폴더는 local_dir/<폴더명>/<하위 구조>로 받는다(여러 폴더 충돌 방지).
+    - 각 파일은 local_dir/<파일명>으로 받는다.
 
     Returns:
         (성공 개수, 실패 개수)
     """
-    if remote_dir is None and not keys:
-        raise ValueError("remote_dir 또는 keys 중 하나를 지정해야 합니다.")
+    if not remote_dirs and not keys:
+        raise ValueError("remote_dirs 또는 keys 중 하나를 지정해야 합니다.")
 
     # (remote_path, local_relative_path) 쌍 수집
     targets: list[tuple[str, str]] = []
-    if keys:
-        for k in keys:
-            targets.append((k, posixpath.basename(k.rstrip("/"))))
-    else:
-        assert remote_dir is not None
+    for remote_dir in remote_dirs or []:
         base = remote_dir.rstrip("/")
+        folder = posixpath.basename(base) if base else ""
         for obj in list_all_files(ssh, base):
-            rel = obj["key"][len(base):].lstrip("/")
+            stripped = obj["key"][len(base):].lstrip("/")
+            rel = f"{folder}/{stripped}" if folder else stripped
             targets.append((obj["key"], rel))
+    for k in keys or []:
+        targets.append((k, posixpath.basename(k.rstrip("/"))))
 
     if not targets:
         return 0, 0
@@ -414,7 +429,7 @@ def _upload_one(
     parent = posixpath.dirname(remote_path)
     if parent:
         _sftp_makedirs(sftp, parent)
-    callback = _IncrementalCallback(on_bytes) if on_bytes else None
+    callback = _IncrementalCallback(on_bytes, cancel_event)
     sftp.put(str(local_file), remote_path, callback=callback)
     return True
 

@@ -126,14 +126,30 @@ def flat_summary(
 # 다운로드
 # ---------------------------------------------------------------------------
 
-class _BytesProgressCallback:
-    """boto3 Callback 어댑터 — 증분 바이트를 외부 콜백으로 전달한다."""
+class TransferCanceled(Exception):
+    """전송 콜백에서 취소가 감지되면 발생 — 진행 중 파일을 즉시 중단시킨다."""
 
-    def __init__(self, on_bytes: BytesCallback) -> None:
+
+class _BytesProgressCallback:
+    """boto3 Callback 어댑터 — 증분 바이트를 외부 콜백으로 전달하고 취소를 감지한다.
+
+    boto3는 전송 중 이 콜백을 주기적으로 호출하므로, 취소 시 예외를 던지면
+    download_file/upload_file이 즉시 중단된다(큰 파일도 중간에 멈춤).
+    """
+
+    def __init__(
+        self,
+        on_bytes: BytesCallback | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> None:
         self._on_bytes = on_bytes
+        self._cancel_event = cancel_event
 
     def __call__(self, bytes_amount: int) -> None:
-        self._on_bytes(bytes_amount)
+        if self._cancel_event is not None and self._cancel_event.is_set():
+            raise TransferCanceled()
+        if self._on_bytes is not None:
+            self._on_bytes(bytes_amount)
 
 
 def download_single(
@@ -157,11 +173,14 @@ def download_single(
         local.parent.mkdir(parents=True, exist_ok=True)
 
         kwargs: dict = {"Bucket": bucket, "Key": key, "Filename": str(local)}
-        if on_bytes:
-            kwargs["Callback"] = _BytesProgressCallback(on_bytes)
+        if on_bytes or cancel_event:
+            kwargs["Callback"] = _BytesProgressCallback(on_bytes, cancel_event)
 
         s3_client.download_file(**kwargs)
         return True
+    except TransferCanceled:
+        logger.debug("다운로드 취소됨 (%s)", key)
+        return False
     except ClientError as exc:
         logger.error("다운로드 실패 (%s): %s", key, exc)
         return False
@@ -175,32 +194,35 @@ def download_objects(
     bucket: str,
     local_dir: str,
     *,
-    prefix: str | None = None,
+    prefixes: list[str] | None = None,
     keys: list[str] | None = None,
     max_workers: int = 5,
     on_bytes: BytesCallback | None = None,
     on_file: FileCallback | None = None,
     cancel_event: threading.Event | None = None,
 ) -> tuple[int, int]:
-    """prefix 또는 keys 목록을 로컬 디렉터리로 다운로드한다.
+    """여러 prefix(폴더) + keys(파일)를 로컬 디렉터리로 다운로드한다.
 
-    prefix와 keys 중 하나는 반드시 지정해야 한다.
+    prefixes와 keys 중 하나 이상을 지정해야 한다.
+    - 각 폴더는 local_dir/<폴더명>/<하위 구조>로 받는다(여러 폴더 충돌 방지).
+    - 각 파일은 local_dir/<파일명>으로 받는다.
 
     Returns:
         (성공 개수, 실패 개수)
     """
-    if prefix is None and not keys:
-        raise ValueError("prefix 또는 keys 중 하나를 지정해야 합니다.")
+    if not prefixes and not keys:
+        raise ValueError("prefixes 또는 keys 중 하나를 지정해야 합니다.")
 
-    # 대상 키 목록 수집
-    if keys:
-        targets = [(k, k) for k in keys]  # (s3_key, relative_path)
-    else:
-        assert prefix is not None
-        objs = list_all_objects(s3_client, bucket, prefix)
-        targets = [
-            (obj["key"], _strip_prefix(obj["key"], prefix)) for obj in objs
-        ]
+    # 대상 (s3_key, local_relative_path) 수집
+    targets: list[tuple[str, str]] = []
+    for prefix in prefixes or []:
+        folder = prefix.rstrip("/").split("/")[-1] if prefix.rstrip("/") else ""
+        for obj in list_all_objects(s3_client, bucket, prefix):
+            stripped = _strip_prefix(obj["key"], prefix)
+            rel = f"{folder}/{stripped}" if folder else stripped
+            targets.append((obj["key"], rel))
+    for k in keys or []:
+        targets.append((k, os.path.basename(k.rstrip("/"))))
 
     if not targets:
         return 0, 0
@@ -283,10 +305,13 @@ def upload_single(
 
     try:
         kwargs: dict = {"Filename": str(local_file), "Bucket": bucket, "Key": s3_key}
-        if on_bytes:
-            kwargs["Callback"] = _BytesProgressCallback(on_bytes)
+        if on_bytes or cancel_event:
+            kwargs["Callback"] = _BytesProgressCallback(on_bytes, cancel_event)
         s3_client.upload_file(**kwargs)
         return True
+    except TransferCanceled:
+        logger.debug("업로드 취소됨 (%s)", s3_key)
+        return False
     except ClientError as exc:
         logger.error("업로드 실패 (%s): %s", s3_key, exc)
         return False
