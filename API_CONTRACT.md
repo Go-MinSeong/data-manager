@@ -46,7 +46,7 @@ S3Folder = {
 
 Job = {
   jobId: string
-  kind: "download" | "upload" | "sync"
+  kind: "download" | "upload" | "sync" | "remote-download" | "remote-upload"
   status: "pending" | "running" | "done" | "error" | "canceled"
   totalFiles: number
   completedFiles: number
@@ -91,6 +91,28 @@ Job = {
 - `GET  /api/jobs` → `{ jobs: Job[] }`  (최근 작업 이력, 최신순)
 - `GET  /api/jobs/{jobId}` → `Job`
 - `POST /api/jobs/{jobId}/cancel` → `{ ok: true }`
+
+### 원격(SFTP) 서버
+S3와 독립된 "활성 원격 연결" 1개를 서버 메모리에 보관한다(SSH/paramiko). 잡·WebSocket·pick/reveal은 S3와 공유한다.
+- `GET  /api/remote/profiles` → `{ profiles: RemoteProfile[] }`
+  - `RemoteProfile = { name, host, port, username, authType: "key"|"password", keyPath: string|null }` (비밀 미포함)
+  - 메타데이터는 `~/Library/Application Support/S3Manager/remote_profiles.json`, 비밀(키 passphrase/password)은 Keychain(`ai.nota.s3manager.remote`).
+- `POST /api/remote/profiles` body `{ name, host, port?, username, authType, keyPath?, secret? }` → `{ ok: true }`
+  - `secret`은 Keychain에만 저장. `secret` 생략 시 기존 비밀 유지(메타만 갱신).
+- `DELETE /api/remote/profiles/{name}` → `{ ok: true }`
+- `POST /api/remote/connect` body 중 하나:
+  - 프로파일: `{ mode: "profile", profileName }`
+  - 즉석: `{ mode: "adhoc", host, port?, username, authType, keyPath?, secret? }`
+  → 성공 `{ ok: true, host, username, homeDir }` / 실패 `{ ok: false, error: string }`
+  - `authType="key"`면 secret은 키 passphrase, `"password"`면 로그인 비밀번호로 사용. 키 미지정 시 `~/.ssh` 기본 키·ssh-agent도 시도.
+- `GET  /api/remote/connection` → `{ connected: bool, host?, username?, homeDir? }`
+- `POST /api/remote/disconnect` → `{ ok: true }`
+- `GET  /api/remote/objects?path=<p>` → 한 레벨만 `{ prefix, folders: S3Folder[], objects: S3Object[] }`
+  - `path` 미지정 시 홈 디렉터리. S3 `/api/objects`와 응답 형태 동일(프론트 트리 재사용). 폴더 `key`는 트레일링 슬래시 포함, 객체 `key`는 절대 경로.
+- `POST /api/remote/download` body `{ remoteDir?, keys?: string[], localDir, maxWorkers? }` → `{ jobId }`
+  - `remoteDir` 주면 하위 전체(재귀, 구조 보존), `keys` 주면 지정 파일만(평면). 둘 중 하나 필수. 잡 `kind="remote-download"`.
+- `POST /api/remote/upload` body `{ remoteDir, localPaths: string[], maxWorkers? }` → `{ jobId }`
+  - `localPaths`는 파일/폴더 혼합. 폴더는 재귀 업로드, 원격 디렉터리 자동 생성. 잡 `kind="remote-upload"`.
 
 ### 로컬 / 시스템 (shell 연동)
 - `POST /api/pick-folder` → `{ path: string | null }`  네이티브 폴더 선택 다이얼로그.

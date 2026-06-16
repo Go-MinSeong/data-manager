@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from s3manager.core import s3_engine
+from s3manager.core import sftp_engine
 
 logger = logging.getLogger(__name__)
 
@@ -329,6 +330,78 @@ class JobManager:
                 s3_client,
                 bucket,
                 prefix,
+                local_paths,
+                max_workers=max_workers,
+                on_bytes=on_bytes,
+                on_file=on_file,
+                cancel_event=job._cancel_event,
+            )
+
+        self._executor.submit(self._run_job, job, task)
+        return job.job_id
+
+    # ------------------------------------------------------------------
+    # 원격(SFTP) 잡
+    # ------------------------------------------------------------------
+
+    def submit_remote_download(
+        self,
+        ssh,
+        local_dir: str,
+        *,
+        remote_dir: str | None = None,
+        keys: list[str] | None = None,
+        max_workers: int = 4,
+    ) -> str:
+        """원격 → 로컬 다운로드 잡을 생성하고 jobId를 반환한다."""
+        job = self._new_job("remote-download", local_dir=local_dir)
+
+        # 총 크기/파일 수 미리 파악 (best-effort)
+        try:
+            if remote_dir is not None:
+                summary = sftp_engine.flat_summary(ssh, remote_dir)
+                job.total_files = summary["totalFiles"]
+                job.total_bytes = summary["totalBytes"]
+            elif keys:
+                job.total_files = len(keys)
+        except Exception:
+            pass
+
+        on_bytes, on_file = self._make_callbacks(job)
+
+        def task():
+            return sftp_engine.download_files(
+                ssh,
+                local_dir,
+                remote_dir=remote_dir,
+                keys=keys,
+                max_workers=max_workers,
+                on_bytes=on_bytes,
+                on_file=on_file,
+                cancel_event=job._cancel_event,
+            )
+
+        self._executor.submit(self._run_job, job, task)
+        return job.job_id
+
+    def submit_remote_upload(
+        self,
+        ssh,
+        remote_dir: str,
+        local_paths: list[str],
+        *,
+        max_workers: int = 4,
+    ) -> str:
+        """로컬 → 원격 업로드 잡을 생성하고 jobId를 반환한다."""
+        src_dir = os.path.dirname(local_paths[0]) if local_paths else ""
+        job = self._new_job("remote-upload", local_dir=src_dir)
+
+        on_bytes, on_file = self._make_callbacks(job)
+
+        def task():
+            return sftp_engine.upload_files(
+                ssh,
+                remote_dir,
                 local_paths,
                 max_workers=max_workers,
                 on_bytes=on_bytes,

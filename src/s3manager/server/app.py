@@ -17,7 +17,9 @@ from fastapi.staticfiles import StaticFiles
 from s3manager import __version__, settings
 from s3manager.core import credentials as creds_module
 from s3manager.core import preferences as prefs_module
+from s3manager.core import remote_profiles as remote_module
 from s3manager.core import s3_engine
+from s3manager.core import sftp_engine
 from s3manager.core.jobs import job_manager
 from s3manager.server.models import (
     BucketInfo,
@@ -40,10 +42,16 @@ from s3manager.server.models import (
     PickFolderResponse,
     Profile,
     ProfilesResponse,
+    RemoteConnectionStatusResponse,
+    RemoteDownloadRequest,
+    RemoteProfile,
+    RemoteProfilesResponse,
+    RemoteUploadRequest,
     RevealRequest,
     S3Folder,
     S3Object,
     SaveCredentialsRequest,
+    SaveRemoteProfileRequest,
     UploadRequest,
 )
 
@@ -118,6 +126,50 @@ class _ActiveSession:
 
 
 _session = _ActiveSession()
+
+
+class _RemoteSession:
+    """서버 메모리에 보관되는 활성 SFTP(SSH) 연결. S3 세션과 독립적."""
+
+    def __init__(self) -> None:
+        self.ssh = None  # paramiko.SSHClient | None
+        self.host: str | None = None
+        self.username: str | None = None
+        self.home_dir: str | None = None
+        self.connected: bool = False
+
+    def connect(self, ssh, host: str, username: str, home_dir: str) -> None:
+        # 기존 연결이 있으면 정리
+        self.disconnect()
+        self.ssh = ssh
+        self.host = host
+        self.username = username
+        self.home_dir = home_dir
+        self.connected = True
+
+    def disconnect(self) -> None:
+        if self.ssh is not None:
+            try:
+                self.ssh.close()
+            except Exception:
+                pass
+        self.ssh = None
+        self.host = None
+        self.username = None
+        self.home_dir = None
+        self.connected = False
+
+    def require_ssh(self):
+        """SSH 클라이언트를 반환하거나, 연결 안 됐으면 409를 raise한다."""
+        if not self.connected or self.ssh is None:
+            raise HTTPException(
+                status_code=409,
+                detail="원격 서버에 연결되어 있지 않습니다. 먼저 /api/remote/connect를 호출하세요.",
+            )
+        return self.ssh
+
+
+_remote = _RemoteSession()
 
 # ---------------------------------------------------------------------------
 # FastAPI 앱 생성
@@ -443,6 +495,174 @@ async def cancel_job(job_id: str) -> OkResponse:
     if not ok:
         raise HTTPException(status_code=404, detail=f"잡을 찾을 수 없거나 이미 완료됨: {job_id}")
     return OkResponse(ok=True)
+
+
+# ---------------------------------------------------------------------------
+# 원격(SFTP) 서버 — 프로파일 / 연결 / 탐색 / 전송
+# ---------------------------------------------------------------------------
+
+@app.get("/api/remote/profiles", response_model=RemoteProfilesResponse)
+async def get_remote_profiles() -> RemoteProfilesResponse:
+    """저장된 원격 서버 프로파일 목록을 반환한다(비밀 미포함)."""
+    raw = remote_module.list_remote_profiles()
+    profiles = [
+        RemoteProfile(
+            name=p["name"],
+            host=p["host"],
+            port=p["port"],
+            username=p["username"],
+            auth_type=p["authType"],  # type: ignore[arg-type]
+            key_path=p.get("keyPath"),
+        )
+        for p in raw
+    ]
+    return RemoteProfilesResponse(profiles=profiles)
+
+
+@app.post("/api/remote/profiles", response_model=OkResponse)
+async def save_remote_profile(body: SaveRemoteProfileRequest) -> OkResponse:
+    """원격 프로파일을 저장한다(비밀은 Keychain)."""
+    remote_module.save_remote_profile(
+        name=body.name,
+        host=body.host,
+        port=body.port,
+        username=body.username,
+        auth_type=body.auth_type,
+        key_path=body.key_path,
+        secret=body.secret,
+    )
+    return OkResponse(ok=True)
+
+
+@app.delete("/api/remote/profiles/{name}", response_model=OkResponse)
+async def delete_remote_profile(name: str) -> OkResponse:
+    """원격 프로파일을 삭제한다."""
+    remote_module.delete_remote_profile(name)
+    return OkResponse(ok=True)
+
+
+@app.post("/api/remote/connect")
+async def remote_connect(body: dict) -> JSONResponse:
+    """원격 서버에 SSH 연결을 맺고 활성 세션에 저장한다.
+
+    body:
+      - { mode: "profile", profileName }
+      - { mode: "adhoc", host, port?, username, authType, keyPath?, secret? }
+    """
+    mode = body.get("mode")
+    if mode not in ("profile", "adhoc"):
+        raise HTTPException(status_code=422, detail="mode는 'profile' 또는 'adhoc'이어야 합니다.")
+
+    if mode == "profile":
+        name = body.get("profileName")
+        if not name:
+            raise HTTPException(status_code=422, detail="profile 모드에는 profileName이 필요합니다.")
+        prof = remote_module.load_remote_profile(name)
+        if prof is None:
+            raise HTTPException(status_code=404, detail=f"원격 프로파일을 찾을 수 없습니다: {name}")
+        host, port, username = prof["host"], prof["port"], prof["username"]
+        auth_type, key_path, secret = prof["authType"], prof.get("keyPath"), prof.get("secret")
+    else:
+        host = body.get("host")
+        username = body.get("username")
+        if not host or not username:
+            raise HTTPException(status_code=422, detail="adhoc 모드에는 host와 username이 필요합니다.")
+        port = int(body.get("port") or 22)
+        auth_type = body.get("authType") or "key"
+        key_path = body.get("keyPath")
+        secret = body.get("secret")
+
+    key_passphrase = secret if auth_type == "key" else None
+    password = secret if auth_type == "password" else None
+
+    try:
+        ssh = sftp_engine.connect(
+            host=host,
+            port=port,
+            username=username,
+            key_path=key_path,
+            key_passphrase=key_passphrase,
+            password=password,
+        )
+        home = sftp_engine.home_dir(ssh)
+    except Exception as exc:
+        logger.warning("원격 연결 실패: %s", exc)
+        return JSONResponse(status_code=200, content={"ok": False, "error": str(exc)})
+
+    _remote.connect(ssh, host=host, username=username, home_dir=home)
+    logger.info("원격 연결 성공: %s@%s (home=%s)", username, host, home)
+    return JSONResponse(
+        content={"ok": True, "host": host, "username": username, "homeDir": home}
+    )
+
+
+@app.get("/api/remote/connection", response_model=RemoteConnectionStatusResponse)
+async def get_remote_connection() -> RemoteConnectionStatusResponse:
+    """현재 원격 연결 상태를 반환한다."""
+    if not _remote.connected:
+        return RemoteConnectionStatusResponse(connected=False)
+    return RemoteConnectionStatusResponse(
+        connected=True,
+        host=_remote.host,
+        username=_remote.username,
+        home_dir=_remote.home_dir,
+    )
+
+
+@app.post("/api/remote/disconnect", response_model=OkResponse)
+async def remote_disconnect() -> OkResponse:
+    """원격 연결을 종료한다."""
+    _remote.disconnect()
+    return OkResponse(ok=True)
+
+
+@app.get("/api/remote/objects", response_model=ObjectsResponse)
+async def list_remote_objects(path: str = "") -> ObjectsResponse:
+    """원격 디렉터리의 한 레벨을 열거한다. path가 비면 홈 디렉터리."""
+    ssh = _remote.require_ssh()
+    try:
+        result = sftp_engine.list_one_level(ssh, path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"원격 목록 조회 실패: {exc}")
+
+    folders = [S3Folder(**f) for f in result["folders"]]
+    objects = [
+        S3Object(key=o["key"], size=o["size"], last_modified=o["lastModified"])
+        for o in result["objects"]
+    ]
+    # 실제 열거된 디렉터리(정규화 경로)를 prefix로 돌려준다.
+    resolved = path or (_remote.home_dir or "")
+    return ObjectsResponse(prefix=resolved, folders=folders, objects=objects)
+
+
+@app.post("/api/remote/download", response_model=JobIdResponse)
+async def start_remote_download(body: RemoteDownloadRequest) -> JobIdResponse:
+    """원격 → 로컬 다운로드 잡을 생성한다. remoteDir 또는 keys 중 하나 필수."""
+    if body.remote_dir is None and not body.keys:
+        raise HTTPException(status_code=422, detail="remoteDir 또는 keys 중 하나가 필요합니다.")
+    ssh = _remote.require_ssh()
+    prefs_module.set_last_download_dir(body.local_dir)
+    job_id = job_manager.submit_remote_download(
+        ssh,
+        body.local_dir,
+        remote_dir=body.remote_dir,
+        keys=body.keys,
+        max_workers=body.max_workers,
+    )
+    return JobIdResponse(job_id=job_id)
+
+
+@app.post("/api/remote/upload", response_model=JobIdResponse)
+async def start_remote_upload(body: RemoteUploadRequest) -> JobIdResponse:
+    """로컬 → 원격 업로드 잡을 생성한다."""
+    ssh = _remote.require_ssh()
+    job_id = job_manager.submit_remote_upload(
+        ssh,
+        body.remote_dir,
+        body.local_paths,
+        max_workers=body.max_workers,
+    )
+    return JobIdResponse(job_id=job_id)
 
 
 # ---------------------------------------------------------------------------

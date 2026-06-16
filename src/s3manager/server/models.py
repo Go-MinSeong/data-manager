@@ -166,6 +166,60 @@ class JobsResponse(CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# 원격(SFTP) 서버
+# ---------------------------------------------------------------------------
+
+class RemoteProfile(CamelModel):
+    """원격 서버 프로파일 (비밀 미포함)."""
+
+    name: str
+    host: str
+    port: int = 22
+    username: str
+    auth_type: Literal["key", "password"] = "key"
+    key_path: str | None = None
+
+
+class RemoteProfilesResponse(CamelModel):
+    profiles: list[RemoteProfile]
+
+
+class SaveRemoteProfileRequest(CamelModel):
+    """원격 프로파일 저장 요청.
+
+    secret(키 passphrase 또는 password)은 Keychain에만 저장된다.
+    """
+
+    name: str
+    host: str
+    port: int = 22
+    username: str
+    auth_type: Literal["key", "password"] = "key"
+    key_path: str | None = None
+    secret: str | None = None
+
+
+class RemoteConnectionStatusResponse(CamelModel):
+    connected: bool
+    host: str | None = None
+    username: str | None = None
+    home_dir: str | None = None
+
+
+class RemoteDownloadRequest(CamelModel):
+    remote_dir: str | None = None
+    keys: list[str] | None = None
+    local_dir: str
+    max_workers: int = 4
+
+
+class RemoteUploadRequest(CamelModel):
+    remote_dir: str = ""
+    local_paths: list[str]
+    max_workers: int = 4
+
+
+# ---------------------------------------------------------------------------
 # 로컬 / 시스템
 # ---------------------------------------------------------------------------
 
