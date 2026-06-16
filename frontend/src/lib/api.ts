@@ -1,6 +1,6 @@
 // API 클라이언트 — /api 엔드포인트 래퍼
 
-import type { Profile, Job } from '../types'
+import type { Profile, Job, RemoteProfile } from '../types'
 
 const BASE = '/api'
 
@@ -124,6 +124,79 @@ export const startUpload = (body: {
   localPaths: string[]
   maxWorkers?: number
 }) => request<{ jobId: string }>('POST', '/upload', body)
+
+// ── 원격(SFTP) 서버 ───────────────────────────────────────────────────────────
+
+export const getRemoteProfiles = () =>
+  request<{ profiles: RemoteProfile[] }>('GET', '/remote/profiles')
+
+export const saveRemoteProfile = (data: {
+  name: string
+  host: string
+  port: number
+  username: string
+  authType: 'key' | 'password'
+  keyPath?: string | null
+  secret?: string
+}) => request<{ ok: true }>('POST', '/remote/profiles', data)
+
+export const deleteRemoteProfile = (name: string) =>
+  request<{ ok: true }>('DELETE', `/remote/profiles/${encodeURIComponent(name)}`)
+
+export const remoteConnect = (
+  body:
+    | { mode: 'profile'; profileName: string }
+    | {
+        mode: 'adhoc'
+        host: string
+        port?: number
+        username: string
+        authType: 'key' | 'password'
+        keyPath?: string | null
+        secret?: string
+      },
+) =>
+  request<
+    | { ok: true; host: string; username: string; homeDir: string }
+    | { ok: false; error: string }
+  >('POST', '/remote/connect', body)
+
+export const getRemoteConnection = () =>
+  request<{
+    connected: boolean
+    host?: string
+    username?: string
+    homeDir?: string
+  }>('GET', '/remote/connection')
+
+export const remoteDisconnect = () =>
+  request<{ ok: true }>('POST', '/remote/disconnect')
+
+export const getRemoteObjects = (path?: string) => {
+  const params = new URLSearchParams()
+  if (path) params.set('path', path)
+  const qs = params.toString()
+  return request<{
+    prefix: string
+    folders: import('../types').S3Folder[]
+    objects: import('../types').S3Object[]
+  }>('GET', `/remote/objects${qs ? `?${qs}` : ''}`)
+}
+
+export const startRemoteDownload = (body: {
+  remoteDir?: string
+  keys?: string[]
+  localDir: string
+  maxWorkers?: number
+}) => request<{ jobId: string }>('POST', '/remote/download', body)
+
+export const startRemoteUpload = (body: {
+  remoteDir: string
+  localPaths: string[]
+  maxWorkers?: number
+}) => request<{ jobId: string }>('POST', '/remote/upload', body)
+
+// ── 잡 ────────────────────────────────────────────────────────────────────────
 
 export const getJobs = () => request<{ jobs: Job[] }>('GET', '/jobs')
 

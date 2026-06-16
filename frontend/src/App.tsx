@@ -4,6 +4,9 @@ import { ConnectBar } from './components/ConnectBar'
 import { ConnectPanel } from './components/ConnectPanel'
 import { TreeSidebar } from './components/TreeSidebar'
 import { MainPanel } from './components/MainPanel'
+import { RemoteConnectPanel } from './components/RemoteConnectPanel'
+import { RemoteTreeSidebar } from './components/RemoteTreeSidebar'
+import { RemoteMainPanel } from './components/RemoteMainPanel'
 import { ToastContainer } from './components/Toast'
 import * as api from './lib/api'
 
@@ -13,6 +16,12 @@ const SIDEBAR_MAX = 700
 function AppInner() {
   const [state, dispatch] = useReducer(appReducer, initialAppState)
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set())
+  const [selectedRemoteDir, setSelectedRemoteDir] = useState<string>('')
+
+  // 모드 전환 시 선택 항목 초기화 (S3 키와 원격 경로는 의미가 다르다)
+  useEffect(() => {
+    setCheckedKeys(new Set())
+  }, [state.mode])
 
   // 사이드바 폭 (드래그로 조절, localStorage에 유지)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -51,16 +60,20 @@ function AppInner() {
     }
   }, [])
 
-  // 초기화 시 현재 연결 상태 조회
+  // 초기화 시 S3·원격 연결 상태를 모두 조회
   useEffect(() => {
     api.getConnection()
-      .then(res => {
-        dispatch({ type: 'SET_CONNECTION', payload: res })
-      })
-      .catch(() => {
-        // 백엔드 미연결이면 무시
-      })
+      .then(res => dispatch({ type: 'SET_CONNECTION', payload: res }))
+      .catch(() => { /* 백엔드 미연결이면 무시 */ })
+    api.getRemoteConnection()
+      .then(res => dispatch({ type: 'SET_REMOTE_CONNECTION', payload: res }))
+      .catch(() => { /* 무시 */ })
   }, [])
+
+  const isConnected =
+    state.mode === 's3'
+      ? state.connection.connected
+      : state.remoteConnection.connected
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
@@ -70,17 +83,26 @@ function AppInner() {
 
         {/* 메인 영역 */}
         <div className="flex flex-1 min-h-0">
-          {!state.connection.connected ? (
-            // 미연결: 연결 화면
-            <ConnectPanel />
+          {!isConnected ? (
+            // 미연결: 연결 화면 (모드별)
+            state.mode === 's3' ? <ConnectPanel /> : <RemoteConnectPanel />
           ) : (
             // 연결됨: 사이드바 + 드래그 핸들 + 패널
             <>
               <div style={{ width: sidebarWidth }} className="shrink-0 h-full min-h-0">
-                <TreeSidebar
-                  checkedKeys={checkedKeys}
-                  onCheckedChange={setCheckedKeys}
-                />
+                {state.mode === 's3' ? (
+                  <TreeSidebar
+                    checkedKeys={checkedKeys}
+                    onCheckedChange={setCheckedKeys}
+                  />
+                ) : (
+                  <RemoteTreeSidebar
+                    checkedKeys={checkedKeys}
+                    onCheckedChange={setCheckedKeys}
+                    onSelectDir={setSelectedRemoteDir}
+                    selectedDir={selectedRemoteDir}
+                  />
+                )}
               </div>
               {/* 좌우 크기 조절 드래그 바 */}
               <div
@@ -88,10 +110,17 @@ function AppInner() {
                 title="드래그하여 너비 조절"
                 className="w-1 shrink-0 cursor-col-resize bg-zinc-800 hover:bg-blue-500 active:bg-blue-500 transition-colors"
               />
-              <MainPanel
-                checkedKeys={checkedKeys}
-                onCheckedChange={setCheckedKeys}
-              />
+              {state.mode === 's3' ? (
+                <MainPanel
+                  checkedKeys={checkedKeys}
+                  onCheckedChange={setCheckedKeys}
+                />
+              ) : (
+                <RemoteMainPanel
+                  checkedKeys={checkedKeys}
+                  selectedDir={selectedRemoteDir}
+                />
+              )}
             </>
           )}
         </div>

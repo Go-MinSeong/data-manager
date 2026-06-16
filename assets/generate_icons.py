@@ -31,13 +31,26 @@ def _bold_font(px: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
-def draw_cloud_s3(size: int, cutout: bool = False) -> Image.Image:
-    """구름 모양 + 'S3' 글자 아이콘을 그린다.
+def _fit_font(d: ImageDraw.ImageDraw, text: str, max_w: float, max_h: float, start_px: int):
+    """text가 (max_w, max_h) 안에 들어가는 가장 큰 굵은 폰트를 반환한다."""
+    px = start_px
+    while px > 4:
+        font = _bold_font(px)
+        bbox = d.textbbox((0, 0), text, font=font)
+        if (bbox[2] - bbox[0]) <= max_w and (bbox[3] - bbox[1]) <= max_h:
+            return font
+        px -= 1
+    return _bold_font(4)
+
+
+def draw_cloud_s3(size: int, cutout: bool = False, text: str = "S3") -> Image.Image:
+    """구름 모양 + 글자 아이콘을 그린다.
 
     Args:
         size: 정사각형 픽셀 크기
-        cutout: True면 'S3'를 투명하게 도려낸다(메뉴바 template용 단색 실루엣).
-                False면 흰색 'S3'를 구름 위에 그린다(컬러 앱 아이콘).
+        cutout: True면 글자를 투명하게 도려낸다(메뉴바 template용 단색 실루엣).
+                False면 흰색 글자를 구름 위에 그린다(컬러 앱 아이콘).
+        text: 구름 위에 표시할 글자 (예: "S3", "DATA").
     """
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -59,9 +72,8 @@ def draw_cloud_s3(size: int, cutout: bool = False) -> Image.Image:
         fill=CLOUD_COLOR,
     )
 
-    # 'S3' 텍스트 — 크게(유지), 구름 몸통 중앙(세로 ~0.625)에 배치
-    text = "S3"
-    font = _bold_font(int(s * 0.46))
+    # 글자 — 구름 몸통 폭(약 0.82s)에 맞춰 자동 크기 조정, 세로 ~0.625에 배치
+    font = _fit_font(d, text, max_w=s * 0.78, max_h=s * 0.30, start_px=int(s * 0.46))
     bbox = d.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
@@ -81,16 +93,20 @@ def draw_cloud_s3(size: int, cutout: bool = False) -> Image.Image:
     return img
 
 
+TRAY_TEXT = "DATA"  # 메뉴바 아이콘 글자
+APP_TEXT = "S3"     # 앱(dock/.app) 아이콘 글자
+
+
 def main() -> None:
-    # 트레이용 PNG (메뉴바 template — 단색 실루엣 + S3 도려내기)
+    # 트레이용 PNG (메뉴바 template — 단색 실루엣 + 글자 도려내기)
     for sz in [16, 22, 32, 44, 64, 128, 256, 512]:
-        draw_cloud_s3(sz, cutout=True).save(str(ASSETS / f"tray_{sz}.png"))
+        draw_cloud_s3(sz, cutout=True, text=TRAY_TEXT).save(str(ASSETS / f"tray_{sz}.png"))
         print(f"  생성: tray_{sz}.png")
 
     # 트레이 메인 아이콘 — 고해상도로 그린 뒤 구름 경계에 맞춰 크롭(여백 제거).
     # 정사각 캔버스의 위아래 빈 여백 때문에 메뉴바에서 작게 보이던 문제를 해결.
     # 크롭으로 가로로 넓은(납작) 이미지가 되고, tray.py가 높이에 맞춰 키워 표시한다.
-    tray_hi = draw_cloud_s3(176, cutout=True)
+    tray_hi = draw_cloud_s3(176, cutout=True, text=TRAY_TEXT)
     bbox = tray_hi.getbbox()  # 불투명(구름) 영역의 경계
     if bbox:
         pad = 6
@@ -100,12 +116,12 @@ def main() -> None:
         bottom = min(tray_hi.height, bbox[3] + pad)
         tray_hi = tray_hi.crop((left, top, right, bottom))
     tray_hi.save(str(ASSETS / "tray.png"))
-    print(f"  생성: tray.png (구름+S3, template, 크롭 {tray_hi.size})")
+    print(f"  생성: tray.png (구름+{TRAY_TEXT}, template, 크롭 {tray_hi.size})")
 
-    # 앱 아이콘 (512, 컬러 — 파란 구름 + 흰 S3)
-    app_img = draw_cloud_s3(512, cutout=False)
+    # 앱 아이콘 (512, 컬러 — 파란 구름 + 흰 글자)
+    app_img = draw_cloud_s3(512, cutout=False, text=APP_TEXT)
     app_img.save(str(ASSETS / "app_icon.png"))
-    print("  생성: app_icon.png (구름+S3, 컬러)")
+    print(f"  생성: app_icon.png (구름+{APP_TEXT}, 컬러)")
 
     # .icns 생성
     try:
