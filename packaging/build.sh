@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# S3 Manager 빌드 스크립트
+# Data Manager 빌드 스크립트
 #
 # 사용법:
 #   cd /path/to/s3-manager
@@ -8,7 +8,7 @@
 # 빌드 순서:
 #   1. 프론트엔드(React) 빌드 → frontend/dist/
 #   2. 아이콘 생성 (assets/app_icon.icns 없으면)
-#   3. PyInstaller → dist/S3 Manager.app
+#   3. PyInstaller → dist/Data Manager.app
 #
 # 요구사항:
 #   - Node.js + npm (프론트엔드 빌드)
@@ -20,7 +20,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-echo "=== S3 Manager 빌드 시작 ==="
+echo "=== Data Manager 빌드 시작 ==="
 echo "프로젝트 루트: ${PROJECT_ROOT}"
 cd "${PROJECT_ROOT}"
 
@@ -115,7 +115,7 @@ fi
 rm -rf build dist
 S3M_ARCH="${ARCH}" "${PYI}" packaging/s3manager.spec --noconfirm --clean
 
-if [ ! -d "dist/S3 Manager.app" ]; then
+if [ ! -d "dist/Data Manager.app" ]; then
     echo ""
     echo "=== 빌드 실패 ==="
     exit 1
@@ -129,17 +129,17 @@ echo "--- [4/4] 서명 + 패키징 ---"
 
 # ad-hoc 서명: 서명 없는 .app은 일부 환경에서 "손상됨"으로 실행이 막힌다.
 # (정식 Developer ID 서명/공증이 아니므로 다운로드본은 여전히 Gatekeeper 경고 → INSTALL.md)
-codesign --force --deep --sign - "dist/S3 Manager.app" 2>/dev/null \
+codesign --force --deep --sign - "dist/Data Manager.app" 2>/dev/null \
     && echo "ad-hoc 서명 완료" || echo "경고: codesign 실패(서명 없이 진행)"
 
 # 배포용 zip (ditto로 번들 메타데이터/심볼릭링크 보존)
-ZIP="dist/S3-Manager-${ARCH}.zip"
+ZIP="dist/Data-Manager-${ARCH}.zip"
 rm -f "${ZIP}"
-ditto -c -k --sequesterRsrc --keepParent "dist/S3 Manager.app" "${ZIP}"
+ditto -c -k --sequesterRsrc --keepParent "dist/Data Manager.app" "${ZIP}"
 
 echo ""
 echo "=== 빌드 성공 ==="
-echo "  앱:  ${PROJECT_ROOT}/dist/S3 Manager.app"
+echo "  앱:  ${PROJECT_ROOT}/dist/Data Manager.app"
 echo "  zip: ${PROJECT_ROOT}/${ZIP}   ← 이 파일을 동료에게 전달"
 echo ""
 echo "받는 사람 설치: INSTALL.md 참고 (압축 해제 → /Applications 이동 → 첫 실행 시 우클릭 '열기')"

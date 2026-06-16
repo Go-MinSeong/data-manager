@@ -175,7 +175,7 @@ _remote = _RemoteSession()
 # FastAPI 앱 생성
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="S3 Manager API", version=__version__)
+app = FastAPI(title="Data Manager API", version=__version__)
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ async def _startup() -> None:
     """앱 시작 시 asyncio 루프를 잡 매니저에 주입한다."""
     loop = asyncio.get_running_loop()
     job_manager.set_event_loop(loop)
-    logger.info("S3 Manager 백엔드 시작 (포트 %s)", settings.PORT)
+    logger.info("Data Manager 백엔드 시작 (포트 %s)", settings.PORT)
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +368,13 @@ async def get_connection() -> ConnectionStatusResponse:
         identity=_session.identity,
         region=_session.region,
     )
+
+
+@app.post("/api/disconnect", response_model=OkResponse)
+async def disconnect() -> OkResponse:
+    """S3 활성 세션을 해제한다(다른 프로파일로 전환 시 사용)."""
+    _session.disconnect()
+    return OkResponse(ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -783,7 +790,7 @@ _index_html = _dist_dir / "index.html"
 
 _DEV_MESSAGE = (
     "<html><body style='font-family:sans-serif;padding:2rem;'>"
-    "<h2>S3 Manager — 개발 모드</h2>"
+    "<h2>Data Manager — 개발 모드</h2>"
     "<p>프론트엔드 빌드가 없습니다. <code>frontend/dist</code> 디렉터리를 생성해주세요.</p>"
     "<p>API 서버는 정상 동작 중입니다: "
     "<a href='/api/health'>/api/health</a></p>"

@@ -84,6 +84,9 @@ export const getConnection = () =>
     region?: string
   }>('GET', '/connection')
 
+export const disconnect = () =>
+  request<{ ok: true }>('POST', '/disconnect')
+
 // ── 탐색 ────────────────────────────────────────────────────────────────────
 
 export const getBuckets = () =>
@@ -112,7 +115,7 @@ export const getFlatObjects = (bucket: string, prefix?: string) => {
 
 export const startDownload = (body: {
   bucket: string
-  prefix?: string
+  prefixes?: string[]
   keys?: string[]
   localDir: string
   maxWorkers?: number
@@ -184,7 +187,7 @@ export const getRemoteObjects = (path?: string) => {
 }
 
 export const startRemoteDownload = (body: {
-  remoteDir?: string
+  remoteDirs?: string[]
   keys?: string[]
   localDir: string
   maxWorkers?: number

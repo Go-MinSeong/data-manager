@@ -1,4 +1,4 @@
-# S3 Manager 설치 가이드 (받는 사람용)
+# Data Manager 설치 가이드 (받는 사람용)
 
 AWS S3에서 파일을 받고/올리는 macOS 메뉴바 앱입니다. 각자 자기 Mac에서, 자기 AWS 자격증명으로 사용합니다.
 
@@ -8,18 +8,18 @@ AWS S3에서 파일을 받고/올리는 macOS 메뉴바 앱입니다. 각자 자
 
 ## 1. 설치
 1. 전달받은 **`S3-Manager-arm64.zip`** 을 더블클릭해 압축을 풉니다.
-2. 나온 **`S3 Manager.app`** 을 **`응용 프로그램(Applications)`** 폴더로 드래그합니다.
+2. 나온 **`Data Manager.app`** 을 **`응용 프로그램(Applications)`** 폴더로 드래그합니다.
 
 ## 2. 첫 실행 (중요 — Gatekeeper)
 이 앱은 Apple 공증(notarize)을 받지 않아서, 처음엔 macOS가 실행을 막습니다. **한 번만** 아래로 열어주면 그 다음부턴 그냥 열립니다.
 
 **방법 A (권장):**
-1. `응용 프로그램`에서 **`S3 Manager.app`을 우클릭 → "열기"**.
+1. `응용 프로그램`에서 **`Data Manager.app`을 우클릭 → "열기"**.
 2. 경고창이 뜨면 다시 **"열기"** 를 클릭.
 
 **방법 B (방법 A에서 "손상되었습니다"라고 나올 때):** 터미널에서 한 줄 실행 후 다시 실행
 ```bash
-xattr -dr com.apple.quarantine "/Applications/S3 Manager.app"
+xattr -dr com.apple.quarantine "/Applications/Data Manager.app"
 ```
 
 > 정상 실행되면 **Dock에는 안 뜨고 상단 메뉴바에 구름(S3) 아이콘**이 생깁니다.
@@ -34,7 +34,7 @@ xattr -dr com.apple.quarantine "/Applications/S3 Manager.app"
 
 ## 4. (선택) 로그인 시 자동 실행
 메뉴바에 항상 떠 있게 하려면:
-- **시스템 설정 → 일반 → 로그인 항목** → `+` → `S3 Manager.app` 추가.
+- **시스템 설정 → 일반 → 로그인 항목** → `+` → `Data Manager.app` 추가.
 
 ## 5. 안전 / 보안
 - 🛡️ **S3 객체 삭제 기능이 없습니다.** 읽기(목록/다운로드)와 업로드만 가능 — 실수로 S3 데이터를 지울 수 없습니다.

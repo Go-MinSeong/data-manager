@@ -51,7 +51,7 @@ export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
       return
     }
 
-    const dirs = [...checkedKeys].filter(k => k.endsWith('/'))
+    const dirs = [...checkedKeys].filter(k => k.endsWith('/')).map(d => d.replace(/\/$/, ''))
     const keys = [...checkedKeys].filter(k => !k.endsWith('/'))
 
     closeJob()
@@ -59,7 +59,7 @@ export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
 
     try {
       const res = await api.startRemoteDownload({
-        remoteDir: dirs.length > 0 ? dirs[0].replace(/\/$/, '') : undefined,
+        remoteDirs: dirs.length > 0 ? dirs : undefined,
         keys: keys.length > 0 ? keys : undefined,
         localDir,
         maxWorkers,
@@ -72,7 +72,6 @@ export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
   }
 
   const isRunning = jobId && !jobState.done && !jobState.error && !jobState.canceled
-  const dirs = [...checkedKeys].filter(k => k.endsWith('/'))
 
   return (
     <div className="p-5 space-y-5">
@@ -93,11 +92,6 @@ export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
                 <p className="text-xs text-zinc-500">... 외 {checkedKeys.size - 5}개</p>
               )}
             </div>
-          )}
-          {dirs.length > 1 && (
-            <p className="mt-2 pt-2 border-t border-zinc-700 text-[11px] text-amber-400">
-              폴더는 한 번에 하나만 받습니다. 첫 폴더({dirs[0]})만 처리됩니다.
-            </p>
           )}
         </div>
 

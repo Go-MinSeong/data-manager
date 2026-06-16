@@ -48,14 +48,17 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
     }
     setPreviewLoading(true)
     try {
-      // 첫 번째 체크된 키로 미리보기 (prefix 또는 key)
-      const first = [...checkedKeys][0]
-      const isFolder = first.endsWith('/')
-      const res = await api.getFlatObjects(
-        state.selectedBucket,
-        isFolder ? first : undefined,
-      )
-      setPreview(res)
+      // 선택된 모든 폴더의 크기를 합산하고, 파일은 개수만 더한다.
+      const prefixes = [...checkedKeys].filter(k => k.endsWith('/'))
+      const keys = [...checkedKeys].filter(k => !k.endsWith('/'))
+      let totalFiles = keys.length
+      let totalBytes = 0
+      for (const p of prefixes) {
+        const r = await api.getFlatObjects(state.selectedBucket, p)
+        totalFiles += r.totalFiles
+        totalBytes += r.totalBytes
+      }
+      setPreview({ totalFiles, totalBytes })
     } catch (e) {
       toast(e instanceof Error ? e.message : '미리보기 실패')
     } finally {
@@ -77,7 +80,7 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
       return
     }
 
-    // prefix / keys 분리
+    // 체크된 폴더(prefix) / 파일(keys) 분리 — 전부 전송
     const prefixes = [...checkedKeys].filter(k => k.endsWith('/'))
     const keys = [...checkedKeys].filter(k => !k.endsWith('/'))
 
@@ -87,7 +90,7 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
     try {
       const res = await api.startDownload({
         bucket: state.selectedBucket,
-        prefix: prefixes.length > 0 ? prefixes[0] : undefined,
+        prefixes: prefixes.length > 0 ? prefixes : undefined,
         keys: keys.length > 0 ? keys : undefined,
         localDir,
         maxWorkers,

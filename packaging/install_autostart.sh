@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# S3 Manager 자동 실행 설치 스크립트 (macOS LaunchAgent)
+# Data Manager 자동 실행 설치 스크립트 (macOS LaunchAgent)
 #
 # 로그인 시 메뉴바에 항상 상주하도록 LaunchAgent를 등록한다.
 #  - 로그인하면 자동 실행 (RunAtLoad)
@@ -7,7 +7,7 @@
 #  - 트레이 "종료"로 정상 종료(exit 0)하면 다음 로그인까지 재시작 안 함
 #
 # 사용법:
-#   bash packaging/install_autostart.sh ["/Applications/S3 Manager.app"]
+#   bash packaging/install_autostart.sh ["/Applications/Data Manager.app"]
 #   (인자 생략 시 /Applications → ~/Applications → ./dist 순으로 탐색)
 
 set -euo pipefail
@@ -19,15 +19,15 @@ PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
 APP="${1:-}"
 if [[ -z "$APP" ]]; then
   for cand in \
-    "/Applications/S3 Manager.app" \
-    "$HOME/Applications/S3 Manager.app" \
-    "$(cd "$(dirname "$0")/.." && pwd)/dist/S3 Manager.app"; do
+    "/Applications/Data Manager.app" \
+    "$HOME/Applications/Data Manager.app" \
+    "$(cd "$(dirname "$0")/.." && pwd)/dist/Data Manager.app"; do
     if [[ -d "$cand" ]]; then APP="$cand"; break; fi
   done
 fi
 
 if [[ -z "$APP" || ! -d "$APP" ]]; then
-  echo "❌ S3 Manager.app 을 찾을 수 없습니다."
+  echo "❌ Data Manager.app 을 찾을 수 없습니다."
   echo "   먼저 'bash packaging/build.sh' 로 빌드하거나, .app 경로를 인자로 주세요."
   exit 1
 fi

@@ -8,7 +8,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-APP_NAME = "S3 Manager"
+APP_NAME = "Data Manager"
 APP_ID = "ai.nota.s3manager"
 
 # 로컬 FastAPI 서버 바인딩 (외부 노출 금지)

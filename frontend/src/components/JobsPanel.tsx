@@ -92,6 +92,24 @@ export function JobsPanel() {
     void loadJobs()
   }, [loadJobs])
 
+  // 진행 중(pending/running) 잡이 있으면 주기적으로 새로고침
+  useEffect(() => {
+    const hasActive = jobs.some(j => j.status === 'running' || j.status === 'pending')
+    if (!hasActive) return
+    const id = setInterval(() => { void loadJobs() }, 1500)
+    return () => clearInterval(id)
+  }, [jobs, loadJobs])
+
+  const handleCancel = async (jobId: string) => {
+    try {
+      await api.cancelJob(jobId)
+      toast('취소를 요청했습니다.', 'info')
+      await loadJobs()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '취소 실패')
+    }
+  }
+
   const handleReveal = async (job: Job) => {
     // 잡에 기록된 실제 로컬 경로를 Finder에서 연다.
     if (!job.localDir) {
@@ -155,6 +173,15 @@ export function JobsPanel() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {(job.status === 'running' || job.status === 'pending') && (
+                      <button
+                        onClick={() => handleCancel(job.jobId)}
+                        title="취소"
+                        className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-700 transition-colors"
+                      >
+                        <Ban size={13} />
+                      </button>
+                    )}
                     {(job.status === 'done' || job.status === 'error') && (
                       <button
                         onClick={() => handleReveal(job)}
