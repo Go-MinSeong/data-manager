@@ -1,13 +1,14 @@
 # 🚀 S3 Manager
 
-메뉴바 기반 **AWS S3 다운로드 · 업로드 · 동기화** macOS 데스크톱 앱.
+메뉴바 기반 **AWS S3 + 원격 SFTP 서버** 다운로드 · 업로드 macOS 데스크톱 앱.
 
 > 기존 Gradio 기반 `s3_downloader_portable`을 React UI + 네이티브 앱으로 재설계한 버전입니다.
 
 - 🧭 **메뉴바 상주** — 상단 메뉴바 아이콘 클릭으로 네이티브 창이 열립니다 (Dock 미표시).
 - ⚛️ **React + Tailwind UI** — 다크 테마, 버킷/폴더 트리 탐색기, 실시간 진행률.
-- 🔐 **자격증명 안전 저장** — macOS Keychain + `~/.aws` 프로파일 모두 지원.
-- ⬇️⬆️🔄 **다운로드 / 업로드 / 동기화** — 변경분만 동기화, 동시 전송, 취소/이력 지원.
+- 🔀 **S3 / 원격 모드 전환** — 상단 토글로 S3와 SFTP 원격 서버를 오가며 사용.
+- 🔐 **자격증명 안전 저장** — macOS Keychain + `~/.aws` 프로파일, SSH 키 + Keychain 모두 지원.
+- ⬇️⬆️ **다운로드 / 업로드** — 로컬↔S3, 로컬↔원격 서버. 동시 전송, 취소/이력 지원.
 - 📦 **단일 `.app` 배포** — PyInstaller로 독립 실행 앱 빌드.
 
 ## 아키텍처
@@ -22,7 +23,7 @@
                             └─ /api/ws/... → WebSocket (실시간 진행률)
 ```
 
-- **Backend** (`src/s3manager/core`, `server`): boto3 S3 엔진 + FastAPI. 활성 세션을 메모리에 보관.
+- **Backend** (`src/s3manager/core`, `server`): boto3 S3 엔진 + paramiko SFTP 엔진 + FastAPI. S3/원격 활성 세션을 각각 메모리에 보관.
 - **Frontend** (`frontend/`): Vite + React + TypeScript + Tailwind.
 - **Shell** (`src/s3manager/shell`): pystray 메뉴바 + pywebview 창 + 네이티브 파일 다이얼로그.
 - 자세한 인터페이스는 [`API_CONTRACT.md`](API_CONTRACT.md) 참고.
@@ -88,12 +89,15 @@ S3M_ARCH=universal2 bash packaging/build.sh   # → dist/S3-Manager-universal2.z
 
 | 화면 | 설명 |
 |---|---|
-| **연결** | AWS 프로파일 선택 / 직접 키 입력 / 새 프로파일 Keychain 저장. 연결 시 계정·ARN 확인. |
-| **트리 탐색기** | 버킷 → 폴더 lazy-load, 체크박스로 다운로드 대상 선택, 선택 크기 미리보기. |
-| **다운로드** | 저장 경로 선택, 동시 다운로드 수 조절, 실시간 진행률(속도/ETA), 취소. |
-| **업로드** | 파일/폴더(재귀) 선택 → 버킷/prefix 업로드. |
-| **동기화** | down/up 방향, **변경분만 전송**(크기·수정시각 비교). 삭제 없음. |
-| **작업 이력** | 최근 작업 상태 확인, 완료 후 Finder에서 열기. |
+| **모드 토글** | 상단 바에서 **S3 / 원격(SFTP)** 전환. 각 모드의 연결은 독립적으로 유지. |
+| **연결 (S3)** | AWS 프로파일 선택 / 직접 키 입력 / 새 프로파일 Keychain 저장. 연결 시 계정·ARN 확인. |
+| **연결 (원격)** | SFTP 호스트·포트·사용자 입력. SSH 키(passphrase) 또는 비밀번호 인증. 프로파일로 저장 가능(비밀은 Keychain). |
+| **트리 탐색기** | S3: 버킷→폴더 lazy-load / 원격: 홈 디렉터리부터 폴더 lazy-load. 체크박스로 전송 대상 선택. |
+| **다운로드** | 저장 경로 선택, 동시 전송 수 조절, 실시간 진행률(속도/ETA), 취소. |
+| **업로드** | 파일/폴더(재귀) 선택 → S3 버킷/prefix 또는 원격 디렉터리(자동 생성)로 업로드. |
+| **작업 이력** | 최근 작업 상태 확인(S3·원격 공통), 완료 후 Finder에서 열기. |
+
+> 원격 모드 트리는 연결한 계정의 **홈 디렉터리**를 루트로 표시합니다. 그 밖의 절대 경로로 업로드하려면 업로드 화면의 "대상 원격 경로"에 직접 입력하면 됩니다.
 
 ## 자격증명은 어디에 넣나요?
 
@@ -138,8 +142,9 @@ bash packaging/uninstall_autostart.sh
 - **로컬 접근 토큰**: 실행마다 무작위 토큰을 발급하고, 앱 창에만 전달합니다.
   토큰을 모르는 같은 Mac의 **다른 사용자·프로세스·브라우저는 `/api/*` 호출 시 401**로 차단됩니다.
 - **Host 헤더 검증**으로 악성 웹사이트의 DNS 리바인딩 공격을 차단합니다.
-- 자격증명 평문은 디스크에 쓰지 않음. Keychain 저장은 `keyring` 경유.
+- 자격증명 평문은 디스크에 쓰지 않음. Keychain 저장은 `keyring` 경유. 원격 서버의 비밀(SSH 키 passphrase·비밀번호)도 Keychain에만 저장(메타데이터만 `remote_profiles.json`).
 - Keychain 프로파일 이름 인덱스만 `~/Library/Application Support/S3Manager/`에 보관.
+- ⚠️ 원격 SFTP 연결은 편의를 위해 호스트 키를 자동 수락(AutoAddPolicy)합니다 — 신뢰할 수 있는 서버에만 연결하세요.
 
 > ⚠️ 토큰은 네트워크/타 프로세스 접근을 막아줍니다. 다만 앱이 연결된 상태로 떠 있을 때
 > **물리적으로 같은 화면 앞에 앉은 사람**은 창을 조작할 수 있으니, 자리를 비울 땐 화면 잠금을 권장합니다.
@@ -151,6 +156,8 @@ s3-manager/
 ├── API_CONTRACT.md           # 컴포넌트 간 인터페이스 계약
 ├── pyproject.toml
 ├── qa_pipeline_test.py       # 잡/WebSocket 파이프라인 스모크 테스트
+├── qa_sftp_test.py           # SFTP 엔진 E2E(인메모리 SFTP 서버)
+├── qa_remote_http_test.py    # /api/remote/* HTTP E2E
 ├── assets/                   # 트레이/앱 아이콘 (+ generate_icons.py)
 ├── packaging/
 │   ├── s3manager.spec        # PyInstaller 설정
@@ -158,7 +165,7 @@ s3-manager/
 ├── frontend/                 # React (Vite + TS + Tailwind)
 └── src/s3manager/
     ├── settings.py           # 포트/경로/상수 (단일 소스)
-    ├── core/                 # s3_engine · credentials · jobs
+    ├── core/                 # s3_engine · sftp_engine · credentials · remote_profiles · jobs
     ├── server/               # FastAPI app · pydantic models
     └── shell/                # main · tray · bridge
 ```

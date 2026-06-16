@@ -21,7 +21,12 @@ export interface S3Folder {
 
 export type S3Item = S3Object | S3Folder
 
-export type JobKind = 'download' | 'upload' | 'sync'
+export type JobKind =
+  | 'download'
+  | 'upload'
+  | 'sync'
+  | 'remote-download'
+  | 'remote-upload'
 export type JobStatus = 'pending' | 'running' | 'done' | 'error' | 'canceled'
 
 export interface Job {
@@ -62,6 +67,27 @@ export interface ConnectionState {
   connected: boolean
   identity?: { account: string; arn: string }
   region?: string
+}
+
+// 데이터 소스 모드 (S3 / 원격 SFTP 서버)
+export type SourceMode = 's3' | 'remote'
+
+// 원격(SFTP) 서버 프로파일 (비밀 미포함)
+export interface RemoteProfile {
+  name: string
+  host: string
+  port: number
+  username: string
+  authType: 'key' | 'password'
+  keyPath: string | null
+}
+
+// 원격 연결 상태
+export interface RemoteConnectionState {
+  connected: boolean
+  host?: string
+  username?: string
+  homeDir?: string
 }
 
 // 트리 노드

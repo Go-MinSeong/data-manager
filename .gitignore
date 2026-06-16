@@ -11,3 +11,4 @@ __pycache__/
 # 빌드 중간물
 assets/*.iconset/
 *.spec.bak
+dev/
