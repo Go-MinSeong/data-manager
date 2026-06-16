@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-# S3 Manager — PyInstaller spec (macOS .app 번들)
+# Data Manager — PyInstaller spec (macOS .app 번들)
 #
 # 빌드: bash packaging/build.sh   (권장)
-# 결과: dist/S3 Manager.app
+# 결과: dist/Data Manager.app
 #
 # 아키텍처: 환경변수 S3M_ARCH 로 제어 (기본 arm64).
 #   - arm64      : Apple Silicon 전용 (현재 uv arm64 Python으로 빌드 가능)
@@ -169,15 +169,15 @@ coll = COLLECT(
 
 app = BUNDLE(
     coll,
-    name="S3 Manager.app",
+    name="Data Manager.app",
     icon=str(PROJECT_ROOT / "assets" / "app_icon.icns"),
     bundle_identifier="ai.nota.s3manager",
 
     # Info.plist 보강
     info_plist={
         # 앱 표시 이름
-        "CFBundleName": "S3 Manager",
-        "CFBundleDisplayName": "S3 Manager",
+        "CFBundleName": "Data Manager",
+        "CFBundleDisplayName": "Data Manager",
         "CFBundleIdentifier": "ai.nota.s3manager",
         "CFBundleVersion": "1.0.0",
         "CFBundleShortVersionString": "1.0.0",

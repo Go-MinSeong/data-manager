@@ -181,16 +181,17 @@ def main():
         assert summary["totalFiles"] == 2, summary
         assert summary["totalBytes"] == 4096 + 2048, summary
 
-        # 3) download_files — remote_dir 모드(구조 보존) + on_bytes 누적 검증
+        # 3) download_files — 폴더 모드(폴더명 하위 보존) + on_bytes 누적 검증
         recv = {"bytes": 0}
         s, f = sftp_engine.download_files(
-            ssh, dl_dir, remote_dir="/data",
+            ssh, dl_dir, remote_dirs=["/data"],
             on_bytes=lambda n: recv.__setitem__("bytes", recv["bytes"] + n),
         )
         print("다운로드(dir) 성공/실패:", s, f, "| on_bytes 합:", recv["bytes"])
         assert (s, f) == (2, 0), (s, f)
-        assert Path(dl_dir, "a.txt").read_bytes() == b"A" * 4096
-        assert Path(dl_dir, "sub", "b.txt").read_bytes() == b"B" * 2048
+        # 폴더는 local_dir/<폴더명>/ 하위로 받는다
+        assert Path(dl_dir, "data", "a.txt").read_bytes() == b"A" * 4096
+        assert Path(dl_dir, "data", "sub", "b.txt").read_bytes() == b"B" * 2048
         assert recv["bytes"] == 4096 + 2048, "on_bytes 누적이 총 크기와 불일치"
 
         # 4) download_files — keys 모드(평면)
@@ -198,6 +199,19 @@ def main():
         s2, f2 = sftp_engine.download_files(ssh, dl2, keys=["/data/sub/b.txt"])
         assert (s2, f2) == (1, 0), (s2, f2)
         assert Path(dl2, "b.txt").read_bytes() == b"B" * 2048
+
+        # 4b) download_files — 여러 폴더 + 파일 동시(다중 선택)
+        Path(root, "data2").mkdir()
+        Path(root, "data2", "c.txt").write_bytes(b"C" * 512)
+        dl3 = tempfile.mkdtemp(prefix="qa-sftp-dl3-")
+        s3_, f3 = sftp_engine.download_files(
+            ssh, dl3, remote_dirs=["/data", "/data2"], keys=["/top.txt"]
+        )
+        print("다운로드(다중) 성공/실패:", s3_, f3)
+        assert (s3_, f3) == (4, 0), (s3_, f3)  # data(2) + data2(1) + top.txt(1)
+        assert Path(dl3, "data", "a.txt").exists()
+        assert Path(dl3, "data2", "c.txt").read_bytes() == b"C" * 512
+        assert Path(dl3, "top.txt").read_bytes() == b"T" * 100
 
         # 5) upload_files — 폴더 업로드(원격 디렉터리 자동 생성)
         Path(up_src, "local").mkdir()

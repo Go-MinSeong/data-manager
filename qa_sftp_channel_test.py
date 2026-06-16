@@ -67,14 +67,14 @@ def main():
         max_workers = 3
         dl = tempfile.mkdtemp(prefix="qa-chan-dl-")
         s, f = sftp_engine.download_files(
-            ssh, dl, remote_dir="/data", max_workers=max_workers
+            ssh, dl, remote_dirs=["/data"], max_workers=max_workers
         )
         print(f"파일 {n_files}개 다운로드: 성공 {s} 실패 {f} | open_sftp 호출 {opens['n']}회")
 
         # 정확성
         assert (s, f) == (n_files, 0), (s, f)
         for i in range(n_files):
-            assert Path(dl, f"f{i:02d}.bin").read_bytes() == bytes([i % 256]) * 1024
+            assert Path(dl, "data", f"f{i:02d}.bin").read_bytes() == bytes([i % 256]) * 1024
 
         # 핵심: 채널 수가 파일 수에 비례하지 않고 워커 수(+목록 1)에 묶여야 한다.
         # list_all_files 1개 + 전송 워커 채널 max_workers개 = 4개 이하.

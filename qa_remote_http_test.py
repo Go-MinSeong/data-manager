@@ -131,12 +131,13 @@ def main():
 
         # 4) 다운로드 (원격 → 로컬, 재귀)
         dl = tempfile.mkdtemp(prefix="qa-http-dl-")
-        dn = _req("POST", "/api/remote/download", {"remoteDir": "/data", "localDir": dl})
+        dn = _req("POST", "/api/remote/download", {"remoteDirs": ["/data"], "localDir": dl})
         job = _wait_job(dn["jobId"])
         print("download job:", job["kind"], job["status"], job["completedFiles"], "files")
         assert job["status"] == "done" and job["kind"] == "remote-download", job
-        assert Path(dl, "a.txt").read_bytes() == b"A" * 4096
-        assert Path(dl, "sub", "b.txt").read_bytes() == b"B" * 2048
+        # 폴더는 local_dir/<폴더명>/ 하위로 받는다
+        assert Path(dl, "data", "a.txt").read_bytes() == b"A" * 4096
+        assert Path(dl, "data", "sub", "b.txt").read_bytes() == b"B" * 2048
 
         # 5) 연결 해제
         assert _req("POST", "/api/remote/disconnect")["ok"] is True

@@ -1,4 +1,4 @@
-# 🚀 S3 Manager
+# 🚀 Data Manager
 
 메뉴바 기반 **AWS S3 + 원격 SFTP 서버** 다운로드 · 업로드 macOS 데스크톱 앱.
 
@@ -57,7 +57,7 @@ cd frontend && npm run dev
 ```bash
 bash packaging/build.sh
 # 산출물:
-#   dist/S3 Manager.app          (실행용)
+#   dist/Data Manager.app          (실행용)
 #   dist/S3-Manager-arm64.zip    ← 동료에게 전달하는 배포본
 ```
 
@@ -120,7 +120,7 @@ S3M_ARCH=universal2 bash packaging/build.sh   # → dist/S3-Manager-universal2.z
 
 ```bash
 # 1) 앱을 /Applications 로 이동 (권장)
-mv "dist/S3 Manager.app" /Applications/
+mv "dist/Data Manager.app" /Applications/
 
 # 2) 자동 실행 등록 (LaunchAgent)
 bash packaging/install_autostart.sh

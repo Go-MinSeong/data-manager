@@ -273,7 +273,7 @@ class JobManager:
         bucket: str,
         local_dir: str,
         *,
-        prefix: str | None = None,
+        prefixes: list[str] | None = None,
         keys: list[str] | None = None,
         max_workers: int = 5,
     ) -> str:
@@ -282,12 +282,15 @@ class JobManager:
 
         # 총 크기/파일 수 미리 파악 (best-effort, 실패해도 잡은 진행)
         try:
-            if prefix is not None:
-                summary = s3_engine.flat_summary(s3_client, bucket, prefix)
-                job.total_files = summary["totalFiles"]
-                job.total_bytes = summary["totalBytes"]
-            elif keys:
-                job.total_files = len(keys)
+            total_files = 0
+            total_bytes = 0
+            for p in prefixes or []:
+                summary = s3_engine.flat_summary(s3_client, bucket, p)
+                total_files += summary["totalFiles"]
+                total_bytes += summary["totalBytes"]
+            total_files += len(keys or [])
+            job.total_files = total_files
+            job.total_bytes = total_bytes
         except Exception:
             pass
 
@@ -298,7 +301,7 @@ class JobManager:
                 s3_client,
                 bucket,
                 local_dir,
-                prefix=prefix,
+                prefixes=prefixes,
                 keys=keys,
                 max_workers=max_workers,
                 on_bytes=on_bytes,
@@ -349,7 +352,7 @@ class JobManager:
         ssh,
         local_dir: str,
         *,
-        remote_dir: str | None = None,
+        remote_dirs: list[str] | None = None,
         keys: list[str] | None = None,
         max_workers: int = 4,
     ) -> str:
@@ -358,12 +361,15 @@ class JobManager:
 
         # 총 크기/파일 수 미리 파악 (best-effort)
         try:
-            if remote_dir is not None:
-                summary = sftp_engine.flat_summary(ssh, remote_dir)
-                job.total_files = summary["totalFiles"]
-                job.total_bytes = summary["totalBytes"]
-            elif keys:
-                job.total_files = len(keys)
+            total_files = 0
+            total_bytes = 0
+            for d in remote_dirs or []:
+                summary = sftp_engine.flat_summary(ssh, d)
+                total_files += summary["totalFiles"]
+                total_bytes += summary["totalBytes"]
+            total_files += len(keys or [])
+            job.total_files = total_files
+            job.total_bytes = total_bytes
         except Exception:
             pass
 
@@ -373,7 +379,7 @@ class JobManager:
             return sftp_engine.download_files(
                 ssh,
                 local_dir,
-                remote_dir=remote_dir,
+                remote_dirs=remote_dirs,
                 keys=keys,
                 max_workers=max_workers,
                 on_bytes=on_bytes,

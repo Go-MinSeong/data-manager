@@ -1,5 +1,6 @@
-import { Wifi, WifiOff, User, Globe, Server, Cloud } from 'lucide-react'
+import { Wifi, WifiOff, User, Globe, Server, Cloud, LogOut } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
+import * as api from '../lib/api'
 import type { SourceMode } from '../types'
 
 export function ConnectBar() {
@@ -11,12 +12,30 @@ export function ConnectBar() {
     { id: 'remote', label: '원격', icon: <Server size={12} /> },
   ]
 
+  const isConnected = mode === 's3' ? connection.connected : remoteConnection.connected
+
+  const handleDisconnect = async () => {
+    try {
+      if (mode === 's3') {
+        await api.disconnect()
+        dispatch({ type: 'SET_CONNECTION', payload: { connected: false } })
+      } else {
+        await api.remoteDisconnect()
+        dispatch({ type: 'SET_REMOTE_CONNECTION', payload: { connected: false } })
+      }
+    } catch {
+      // 실패해도 화면 상태는 해제로 — 재연결 화면에서 다시 시도
+      if (mode === 's3') dispatch({ type: 'SET_CONNECTION', payload: { connected: false } })
+      else dispatch({ type: 'SET_REMOTE_CONNECTION', payload: { connected: false } })
+    }
+  }
+
   return (
     <header className="h-10 flex items-center gap-3 px-4 bg-zinc-950 border-b border-zinc-800 shrink-0 select-none">
       {/* 로고 */}
       <div className="flex items-center gap-2 font-semibold text-sm text-zinc-200 mr-1">
-        <img src="./favicon.svg" alt="S3" className="w-5 h-5" />
-        S3 Manager
+        <img src="./favicon.svg" alt="Data" className="w-5 h-5" />
+        Data Manager
       </div>
 
       {/* 모드 토글 */}
@@ -92,6 +111,17 @@ export function ConnectBar() {
           <WifiOff size={13} />
           연결 안 됨
         </span>
+      )}
+
+      {isConnected && (
+        <button
+          onClick={handleDisconnect}
+          title={mode === 's3' ? '연결 해제' : '연결 해제 (다른 서버로 전환)'}
+          className="ml-auto flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
+        >
+          <LogOut size={12} />
+          연결 해제
+        </button>
       )}
     </header>
   )

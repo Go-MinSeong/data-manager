@@ -10,9 +10,10 @@ from s3manager.core import jobs as jobs_module
 from s3manager.core.jobs import job_manager
 
 
-def fake_download(s3_client, bucket, local_dir, *, prefix=None, keys=None,
+def fake_download(s3_client, bucket, local_dir, *, prefixes=None, keys=None,
                   max_workers=5, on_bytes=None, on_file=None, cancel_event=None):
     """실제 다운로드 대신 진행률 콜백을 시뮬레이션."""
+    prefix = (prefixes or [""])[0]
     files = ["a.txt", "b.txt", "c.txt"]
     for f in files:
         if cancel_event and cancel_event.is_set():
@@ -32,7 +33,7 @@ async def main():
 
     job_id = job_manager.submit_download(
         s3_client=object(), bucket="b", local_dir="/tmp/qa-down",
-        prefix="folder/", max_workers=3,
+        prefixes=["folder/"], max_workers=3,
     )
     q = job_manager.subscribe(job_id)
     assert q is not None, "subscribe 실패"
@@ -67,7 +68,7 @@ async def main():
     # 취소 경로 검증
     jobs_module.s3_engine.download_objects = fake_download
     job_id2 = job_manager.submit_download(
-        s3_client=object(), bucket="b", local_dir="/tmp/qa2", prefix="x/", max_workers=1,
+        s3_client=object(), bucket="b", local_dir="/tmp/qa2", prefixes=["x/"], max_workers=1,
     )
     q2 = job_manager.subscribe(job_id2)
     await asyncio.sleep(0.1)

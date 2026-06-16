@@ -1,4 +1,4 @@
-"""S3 Manager 앱 진입점.
+"""Data Manager 앱 진입점.
 
 실행 순서:
 1. FastAPI(uvicorn) 서버를 백그라운드 스레드에서 기동.
@@ -78,11 +78,11 @@ def main() -> None:
     server_thread.start()
 
     # 2. 서버 준비 완료까지 대기
-    print(f"[S3 Manager] 서버 기동 대기 중... ({settings.BASE_URL})")
+    print(f"[Data Manager] 서버 기동 대기 중... ({settings.BASE_URL})")
     if not _wait_for_server():
-        print("[S3 Manager] 오류: 서버 기동 타임아웃. 앱을 종료합니다.")
+        print("[Data Manager] 오류: 서버 기동 타임아웃. 앱을 종료합니다.")
         sys.exit(1)
-    print("[S3 Manager] 서버 준비 완료.")
+    print("[Data Manager] 서버 준비 완료.")
 
     # 3. NativeBridge 주입 + 로컬 접근 토큰 발급/등록
     from s3manager.shell.bridge import NativeBridge
@@ -206,7 +206,7 @@ def main() -> None:
     del _tray_refs
 
     # webview.start() 가 반환된 후 (quit_app 에서 destroy 호출됨)
-    print("[S3 Manager] 앱 종료.")
+    print("[Data Manager] 앱 종료.")
     sys.exit(0)
 
 
