@@ -68,11 +68,15 @@ def connect(
         connect_kwargs["key_filename"] = str(Path(key_path).expanduser())
         if key_passphrase:
             connect_kwargs["passphrase"] = key_passphrase
-    if password:
+    if password and not key_path:
+        # 비밀번호 인증: ssh-agent·기본 키 시도를 끄고 바로 password를 쓴다.
+        # (키만 허용하지 않는 서버에서 agent 키를 먼저 시도하다 'Bad authentication type'로
+        #  실패하는 것을 방지)
         connect_kwargs["password"] = password
-        # 명시적 password 인증 시 키 자동 탐색은 끈다(불필요한 지연/실패 방지)
-        if not key_path:
-            connect_kwargs["look_for_keys"] = False
+        connect_kwargs["allow_agent"] = False
+        connect_kwargs["look_for_keys"] = False
+    elif password:
+        connect_kwargs["password"] = password
 
     client.connect(**connect_kwargs)
     return client
