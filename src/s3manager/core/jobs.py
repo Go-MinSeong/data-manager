@@ -22,6 +22,7 @@ from typing import Any
 from s3manager import settings
 from s3manager.core import s3_engine
 from s3manager.core import sftp_engine
+from s3manager.core import transfer_engine
 
 logger = logging.getLogger(__name__)
 
@@ -473,6 +474,78 @@ class JobManager:
                 max_workers=max_workers,
                 on_bytes=on_bytes,
                 on_file=on_file,
+                cancel_event=job._cancel_event,
+            )
+
+        self._executor.submit(self._run_job, job, task)
+        return job.job_id
+
+    # ------------------------------------------------------------------
+    # S3 ↔ 원격 전송 잡
+    # ------------------------------------------------------------------
+
+    def submit_s3_to_remote(
+        self,
+        s3_client,
+        ssh,
+        bucket: str,
+        *,
+        prefixes: list[str] | None = None,
+        keys: list[str] | None = None,
+        remote_dir: str,
+        max_workers: int = 4,
+    ) -> str:
+        """S3 → 원격 전송 잡을 생성한다."""
+        job = self._new_job("s3-to-remote")
+        try:
+            targets = transfer_engine._enumerate_s3(s3_client, bucket, prefixes, keys)
+            s = transfer_engine.summarize(targets)
+            job.total_files = s["totalFiles"]
+            job.total_bytes = s["totalBytes"]
+        except Exception:
+            pass
+
+        on_bytes, on_file = self._make_callbacks(job)
+
+        def task():
+            return transfer_engine.s3_to_remote(
+                s3_client, ssh, bucket,
+                prefixes=prefixes, keys=keys, remote_dir=remote_dir,
+                max_workers=max_workers, on_bytes=on_bytes, on_file=on_file,
+                cancel_event=job._cancel_event,
+            )
+
+        self._executor.submit(self._run_job, job, task)
+        return job.job_id
+
+    def submit_remote_to_s3(
+        self,
+        ssh,
+        s3_client,
+        bucket: str,
+        *,
+        remote_dirs: list[str] | None = None,
+        keys: list[str] | None = None,
+        prefix: str = "",
+        max_workers: int = 4,
+    ) -> str:
+        """원격 → S3 전송 잡을 생성한다."""
+        job = self._new_job("remote-to-s3")
+        try:
+            targets = transfer_engine._enumerate_remote(ssh, remote_dirs, keys)
+            s = transfer_engine.summarize(targets)
+            job.total_files = s["totalFiles"]
+            job.total_bytes = s["totalBytes"]
+        except Exception:
+            pass
+
+        on_bytes, on_file = self._make_callbacks(job)
+
+        def task():
+            return transfer_engine.remote_to_s3(
+                ssh, s3_client, bucket,
+                remote_dirs=remote_dirs, keys=keys, prefix=prefix,
+                max_workers=max_workers, on_bytes=on_bytes, on_file=on_file,
                 cancel_event=job._cancel_event,
             )
 

@@ -7,6 +7,7 @@ import { MainPanel } from './components/MainPanel'
 import { RemoteConnectPanel } from './components/RemoteConnectPanel'
 import { RemoteTreeSidebar } from './components/RemoteTreeSidebar'
 import { RemoteMainPanel } from './components/RemoteMainPanel'
+import { TransferView } from './components/TransferView'
 import { ToastContainer } from './components/Toast'
 import * as api from './lib/api'
 
@@ -83,7 +84,9 @@ function AppInner() {
 
         {/* 메인 영역 */}
         <div className="flex flex-1 min-h-0">
-          {!isConnected ? (
+          {state.mode === 'transfer' ? (
+            <TransferView />
+          ) : !isConnected ? (
             // 미연결: 연결 화면 (모드별)
             state.mode === 's3' ? <ConnectPanel /> : <RemoteConnectPanel />
           ) : (

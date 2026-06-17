@@ -1,4 +1,4 @@
-import { Wifi, WifiOff, User, Globe, Server, Cloud, LogOut } from 'lucide-react'
+import { Wifi, WifiOff, User, Globe, Server, Cloud, LogOut, ArrowLeftRight } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../lib/api'
 import type { SourceMode } from '../types'
@@ -10,9 +10,16 @@ export function ConnectBar() {
   const modes: { id: SourceMode; label: string; icon: React.ReactNode }[] = [
     { id: 's3', label: 'S3', icon: <Cloud size={12} /> },
     { id: 'remote', label: '원격', icon: <Server size={12} /> },
+    { id: 'transfer', label: '전송', icon: <ArrowLeftRight size={12} /> },
   ]
 
-  const isConnected = mode === 's3' ? connection.connected : remoteConnection.connected
+  // 연결 해제 버튼은 단일 엔드포인트 모드(s3/remote)에서만 표시
+  const isConnected =
+    mode === 's3'
+      ? connection.connected
+      : mode === 'remote'
+        ? remoteConnection.connected
+        : false
 
   const handleDisconnect = async () => {
     try {
@@ -59,7 +66,18 @@ export function ConnectBar() {
       <div className="w-px h-4 bg-zinc-700" />
 
       {/* 연결 상태 */}
-      {mode === 's3' ? (
+      {mode === 'transfer' ? (
+        <div className="flex items-center gap-4 text-xs">
+          <span className={`flex items-center gap-1.5 ${connection.connected ? 'text-emerald-400' : 'text-zinc-500'}`}>
+            <Cloud size={12} />
+            S3 {connection.connected ? '연결됨' : '미연결'}
+          </span>
+          <span className={`flex items-center gap-1.5 ${remoteConnection.connected ? 'text-emerald-400' : 'text-zinc-500'}`}>
+            <Server size={12} />
+            원격 {remoteConnection.connected ? `${remoteConnection.username}@${remoteConnection.host}` : '미연결'}
+          </span>
+        </div>
+      ) : mode === 's3' ? (
         connection.connected ? (
           <div className="flex items-center gap-4 text-xs text-zinc-400">
             <span className="flex items-center gap-1.5 text-emerald-400">
