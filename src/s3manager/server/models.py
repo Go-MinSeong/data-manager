@@ -178,6 +178,7 @@ class RemoteProfile(CamelModel):
     username: str
     auth_type: Literal["key", "password"] = "key"
     key_path: str | None = None
+    default_path: str | None = None
 
 
 class RemoteProfilesResponse(CamelModel):
@@ -204,6 +205,24 @@ class RemoteConnectionStatusResponse(CamelModel):
     host: str | None = None
     username: str | None = None
     home_dir: str | None = None
+    default_path: str | None = None
+    profile_name: str | None = None
+
+
+class DiskSpaceResponse(CamelModel):
+    total: int
+    free: int
+    used: int
+
+
+class MeasureResponse(CamelModel):
+    upload_bps: float
+    download_bps: float
+    size_bytes: int
+
+
+class SetDefaultPathRequest(CamelModel):
+    path: str | None = None
 
 
 class RemoteDownloadRequest(CamelModel):

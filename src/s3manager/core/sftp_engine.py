@@ -14,6 +14,7 @@ import logging
 import os
 import posixpath
 import queue
+import shlex
 import stat
 import threading
 import time
@@ -199,6 +200,61 @@ def flat_summary(ssh: paramiko.SSHClient, remote_dir: str) -> dict[str, int]:
     """remote_dir 하위 전체 파일 수와 총 바이트를 반환한다."""
     files = list_all_files(ssh, remote_dir)
     return {"totalFiles": len(files), "totalBytes": sum(f["size"] for f in files)}
+
+
+def disk_space(ssh: paramiko.SSHClient, path: str) -> dict[str, int]:
+    """원격 path가 속한 파일시스템의 용량/여유(byte)를 df로 계산한다."""
+    safe = shlex.quote(path if path else ".")
+    cmd = f"df -Pk {safe} 2>/dev/null | tail -1"
+    _, stdout, _ = ssh.exec_command(cmd, timeout=15)
+    parts = stdout.read().decode("utf-8", "replace").split()
+    # df -Pk: Filesystem 1024-blocks Used Available Capacity Mounted-on
+    if len(parts) < 4:
+        raise OSError("df 출력을 해석할 수 없습니다.")
+    total = int(parts[1]) * 1024
+    free = int(parts[3]) * 1024
+    return {"total": total, "free": free, "used": max(0, total - free)}
+
+
+def measure_throughput(
+    ssh: paramiko.SSHClient, path: str, size_bytes: int = 8 * 1024 * 1024
+) -> dict[str, float]:
+    """Mac↔원격 SFTP 처리량을 임시 프로브 파일로 측정한다(bytes/sec).
+
+    path 아래에 임시 파일을 쓰고(업로드 속도)·읽고(다운로드 속도) 즉시 삭제한다.
+    """
+    sftp = _open_sftp_retry(ssh)
+    base = (path.rstrip("/") or "/") if path else "."
+    probe = posixpath.join(base, f".dm_speedtest_{threading.get_ident()}")
+    block = b"\0" * (1024 * 1024)
+    try:
+        # 업로드
+        t0 = time.monotonic()
+        with sftp.open(probe, "wb") as wf:
+            wf.set_pipelined(True)
+            written = 0
+            while written < size_bytes:
+                wf.write(block)
+                written += len(block)
+        up_elapsed = max(1e-6, time.monotonic() - t0)
+        # 다운로드
+        t0 = time.monotonic()
+        with sftp.open(probe, "rb") as rf:
+            rf.prefetch()
+            while rf.read(1024 * 1024):
+                pass
+        down_elapsed = max(1e-6, time.monotonic() - t0)
+        return {
+            "uploadBps": size_bytes / up_elapsed,
+            "downloadBps": size_bytes / down_elapsed,
+            "sizeBytes": size_bytes,
+        }
+    finally:
+        try:
+            sftp.remove(probe)
+        except Exception:
+            pass
+        sftp.close()
 
 
 # ---------------------------------------------------------------------------

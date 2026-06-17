@@ -171,7 +171,14 @@ export const remoteConnect = (
       },
 ) =>
   request<
-    | { ok: true; host: string; username: string; homeDir: string }
+    | {
+        ok: true
+        host: string
+        username: string
+        homeDir: string
+        defaultPath?: string | null
+        profileName?: string | null
+      }
     | { ok: false; error: string }
   >('POST', '/remote/connect', body)
 
@@ -181,7 +188,33 @@ export const getRemoteConnection = () =>
     host?: string
     username?: string
     homeDir?: string
+    defaultPath?: string | null
+    profileName?: string | null
   }>('GET', '/remote/connection')
+
+export const setRemoteDefaultPath = (name: string, path: string | null) =>
+  request<{ ok: true }>(
+    'POST',
+    `/remote/profiles/${encodeURIComponent(name)}/default-path`,
+    { path },
+  )
+
+export const getRemoteDiskSpace = (path?: string) => {
+  const qs = path ? `?path=${encodeURIComponent(path)}` : ''
+  return request<{ total: number; free: number; used: number }>('GET', `/remote/diskspace${qs}`)
+}
+
+export const getLocalDiskSpace = (path?: string) => {
+  const qs = path ? `?path=${encodeURIComponent(path)}` : ''
+  return request<{ total: number; free: number; used: number }>('GET', `/local/diskspace${qs}`)
+}
+
+export const measureRemote = (path?: string) =>
+  request<{ uploadBps: number; downloadBps: number; sizeBytes: number }>(
+    'POST',
+    '/remote/measure',
+    { path },
+  )
 
 export const remoteDisconnect = () =>
   request<{ ok: true }>('POST', '/remote/disconnect')

@@ -60,6 +60,7 @@ def list_remote_profiles() -> list[dict[str, Any]]:
                 "username": p.get("username", ""),
                 "authType": p.get("authType", "key"),
                 "keyPath": p.get("keyPath"),
+                "defaultPath": p.get("defaultPath"),
             }
         )
     return sorted(result, key=lambda p: p["name"].lower())
@@ -81,17 +82,31 @@ def save_remote_profile(
     secret이 None이면 기존 Keychain 항목을 변경하지 않는다(메타만 갱신).
     """
     profiles = _load_all()
+    existing = profiles.get(name, {})
     profiles[name] = {
         "host": host,
         "port": port,
         "username": username,
         "authType": auth_type,
         "keyPath": key_path,
+        # 기존 기본 폴더는 보존(메타 갱신 시 지워지지 않게)
+        "defaultPath": existing.get("defaultPath"),
     }
     _save_all(profiles)
     if secret:
         keyring.set_password(_SERVICE, name, secret)
     logger.info("원격 프로파일 저장 완료: %s", name)
+
+
+def set_default_path(name: str, path: str | None) -> bool:
+    """프로파일의 기본 탐색 폴더를 저장한다. 프로파일이 없으면 False."""
+    profiles = _load_all()
+    if name not in profiles:
+        return False
+    profiles[name]["defaultPath"] = path or None
+    _save_all(profiles)
+    logger.info("원격 프로파일 기본 폴더 저장: %s → %s", name, path)
+    return True
 
 
 def delete_remote_profile(name: str) -> None:
@@ -121,5 +136,6 @@ def load_remote_profile(name: str) -> dict[str, Any] | None:
         "username": p.get("username", ""),
         "authType": p.get("authType", "key"),
         "keyPath": p.get("keyPath"),
+        "defaultPath": p.get("defaultPath"),
         "secret": secret,
     }

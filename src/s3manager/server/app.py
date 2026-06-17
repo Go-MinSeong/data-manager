@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 from typing import Any, Protocol, Union
 
 import boto3
@@ -43,6 +44,8 @@ from s3manager.server.models import (
     PickFolderResponse,
     Profile,
     ProfilesResponse,
+    DiskSpaceResponse,
+    MeasureResponse,
     RemoteConnectionStatusResponse,
     RemoteDownloadRequest,
     RemoteProfile,
@@ -50,6 +53,7 @@ from s3manager.server.models import (
     RemoteToS3Request,
     RemoteUploadRequest,
     S3ToRemoteRequest,
+    SetDefaultPathRequest,
     RevealRequest,
     S3Folder,
     S3Object,
@@ -139,15 +143,28 @@ class _RemoteSession:
         self.host: str | None = None
         self.username: str | None = None
         self.home_dir: str | None = None
+        self.default_path: str | None = None
+        self.profile_name: str | None = None
         self.connected: bool = False
 
-    def connect(self, ssh, host: str, username: str, home_dir: str) -> None:
+    def connect(
+        self,
+        ssh,
+        host: str,
+        username: str,
+        home_dir: str,
+        *,
+        default_path: str | None = None,
+        profile_name: str | None = None,
+    ) -> None:
         # 기존 연결이 있으면 정리
         self.disconnect()
         self.ssh = ssh
         self.host = host
         self.username = username
         self.home_dir = home_dir
+        self.default_path = default_path
+        self.profile_name = profile_name
         self.connected = True
 
     def disconnect(self) -> None:
@@ -160,6 +177,8 @@ class _RemoteSession:
         self.host = None
         self.username = None
         self.home_dir = None
+        self.default_path = None
+        self.profile_name = None
         self.connected = False
 
     def require_ssh(self):
@@ -531,6 +550,7 @@ async def get_remote_profiles() -> RemoteProfilesResponse:
             username=p["username"],
             auth_type=p["authType"],  # type: ignore[arg-type]
             key_path=p.get("keyPath"),
+            default_path=p.get("defaultPath"),
         )
         for p in raw
     ]
@@ -580,6 +600,8 @@ async def remote_connect(body: dict) -> JSONResponse:
             raise HTTPException(status_code=404, detail=f"원격 프로파일을 찾을 수 없습니다: {name}")
         host, port, username = prof["host"], prof["port"], prof["username"]
         auth_type, key_path, secret = prof["authType"], prof.get("keyPath"), prof.get("secret")
+        default_path = prof.get("defaultPath")
+        profile_name = name
     else:
         host = body.get("host")
         username = body.get("username")
@@ -589,6 +611,8 @@ async def remote_connect(body: dict) -> JSONResponse:
         auth_type = body.get("authType") or "key"
         key_path = body.get("keyPath")
         secret = body.get("secret")
+        default_path = None
+        profile_name = None
 
     key_passphrase = secret if auth_type == "key" else None
     password = secret if auth_type == "password" else None
@@ -607,10 +631,16 @@ async def remote_connect(body: dict) -> JSONResponse:
         logger.warning("원격 연결 실패: %s", exc)
         return JSONResponse(status_code=200, content={"ok": False, "error": str(exc)})
 
-    _remote.connect(ssh, host=host, username=username, home_dir=home)
+    _remote.connect(
+        ssh, host=host, username=username, home_dir=home,
+        default_path=default_path, profile_name=profile_name,
+    )
     logger.info("원격 연결 성공: %s@%s (home=%s)", username, host, home)
     return JSONResponse(
-        content={"ok": True, "host": host, "username": username, "homeDir": home}
+        content={
+            "ok": True, "host": host, "username": username, "homeDir": home,
+            "defaultPath": default_path, "profileName": profile_name,
+        }
     )
 
 
@@ -624,7 +654,64 @@ async def get_remote_connection() -> RemoteConnectionStatusResponse:
         host=_remote.host,
         username=_remote.username,
         home_dir=_remote.home_dir,
+        default_path=_remote.default_path,
+        profile_name=_remote.profile_name,
     )
+
+
+@app.post("/api/remote/profiles/{name}/default-path", response_model=OkResponse)
+async def set_remote_default_path(name: str, body: SetDefaultPathRequest) -> OkResponse:
+    """프로파일의 기본 탐색 폴더를 저장한다."""
+    ok = remote_module.set_default_path(name, body.path)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"원격 프로파일을 찾을 수 없습니다: {name}")
+    # 현재 연결된 프로파일이면 메모리 세션도 갱신
+    if _remote.profile_name == name:
+        _remote.default_path = body.path or None
+    return OkResponse(ok=True)
+
+
+@app.get("/api/remote/diskspace", response_model=DiskSpaceResponse)
+async def remote_diskspace(path: str = "") -> DiskSpaceResponse:
+    """원격 path가 속한 파일시스템의 여유 공간(byte)."""
+    ssh = _remote.require_ssh()
+    try:
+        info = sftp_engine.disk_space(ssh, path or (_remote.home_dir or "."))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"여유 공간 조회 실패: {exc}")
+    return DiskSpaceResponse(total=info["total"], free=info["free"], used=info["used"])
+
+
+@app.post("/api/remote/measure", response_model=MeasureResponse)
+async def remote_measure(body: SetDefaultPathRequest) -> MeasureResponse:
+    """Mac↔원격 전송 속도를 임시 프로브로 측정한다(body.path 위치 사용)."""
+    ssh = _remote.require_ssh()
+    try:
+        res = sftp_engine.measure_throughput(ssh, body.path or (_remote.home_dir or "."))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"속도 측정 실패: {exc}")
+    return MeasureResponse(
+        upload_bps=res["uploadBps"], download_bps=res["downloadBps"], size_bytes=res["sizeBytes"]
+    )
+
+
+@app.get("/api/local/diskspace", response_model=DiskSpaceResponse)
+async def local_diskspace(path: str = "") -> DiskSpaceResponse:
+    """로컬 path가 속한 디스크의 여유 공간(byte)."""
+    import os
+    target = path or str(settings.DEFAULT_DOWNLOAD_DIR)
+    # 존재하지 않는 경로면 존재하는 상위로 거슬러 올라가 측정
+    probe = target
+    while probe and not os.path.exists(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    try:
+        usage = shutil.disk_usage(probe or "/")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"여유 공간 조회 실패: {exc}")
+    return DiskSpaceResponse(total=usage.total, free=usage.free, used=usage.used)
 
 
 @app.post("/api/remote/disconnect", response_model=OkResponse)

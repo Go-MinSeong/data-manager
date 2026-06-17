@@ -82,6 +82,7 @@ export interface RemoteProfile {
   username: string
   authType: 'key' | 'password'
   keyPath: string | null
+  defaultPath?: string | null
 }
 
 // 원격 연결 상태
@@ -90,6 +91,8 @@ export interface RemoteConnectionState {
   host?: string
   username?: string
   homeDir?: string
+  defaultPath?: string | null
+  profileName?: string | null
 }
 
 // 트리 노드

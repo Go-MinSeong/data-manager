@@ -17,7 +17,18 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
   const [jobId, setJobId] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ totalFiles: number; totalBytes: number } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [freeSpace, setFreeSpace] = useState<number | null>(null)
   const { state: jobState, close: closeJob } = useJob(jobId)
+
+  // 저장 경로의 디스크 여유 공간 조회
+  useEffect(() => {
+    if (!localDir) { setFreeSpace(null); return }
+    let cancelled = false
+    api.getLocalDiskSpace(localDir)
+      .then(r => { if (!cancelled) setFreeSpace(r.free) })
+      .catch(() => { if (!cancelled) setFreeSpace(null) })
+    return () => { cancelled = true }
+  }, [localDir])
 
   // 마지막으로 사용한 다운로드 경로를 기본값으로 채운다 (없으면 ~/Downloads).
   useEffect(() => {
@@ -159,6 +170,12 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
             >
               <FolderOpen size={15} />
             </button>
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-3">
+            <span>여유 공간: {freeSpace == null ? '—' : <span className="text-zinc-300">{formatBytes(freeSpace)}</span>}</span>
+            {preview && freeSpace != null && preview.totalBytes > freeSpace && (
+              <span className="text-amber-400">⚠ 공간 부족 가능 (전송 {formatBytes(preview.totalBytes)})</span>
+            )}
           </div>
         </div>
 
