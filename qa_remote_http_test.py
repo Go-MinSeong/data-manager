@@ -17,8 +17,12 @@ import uvicorn
 
 from s3manager import settings
 from s3manager.server import app as app_module
+from s3manager.core.jobs import job_manager
 # 인메모리 SFTP 서버 헬퍼 재사용
 from qa_sftp_test import _Server, _make_stub  # noqa: E402
+
+# 실제 이력 파일을 건드리지 않도록 임시 경로로 격리
+job_manager._history_path = Path(tempfile.mkdtemp(prefix="qa-jobs-")) / "jobs.json"
 
 
 def _serve_sftp(sock, host_key, root, stop):

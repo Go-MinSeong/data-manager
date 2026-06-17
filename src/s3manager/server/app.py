@@ -10,6 +10,7 @@ import logging
 from typing import Any, Protocol, Union
 
 import boto3
+import paramiko
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -160,11 +161,19 @@ class _RemoteSession:
         self.connected = False
 
     def require_ssh(self):
-        """SSH 클라이언트를 반환하거나, 연결 안 됐으면 409를 raise한다."""
+        """SSH 클라이언트를 반환한다. 연결 안 됨/끊김이면 409를 raise하고 세션을 정리한다."""
         if not self.connected or self.ssh is None:
             raise HTTPException(
                 status_code=409,
-                detail="원격 서버에 연결되어 있지 않습니다. 먼저 /api/remote/connect를 호출하세요.",
+                detail="원격 서버에 연결되어 있지 않습니다. 먼저 연결하세요.",
+            )
+        # transport가 죽었으면(연결 끊김) 세션을 정리하고 재연결을 유도한다.
+        transport = self.ssh.get_transport()
+        if transport is None or not transport.is_active():
+            self.disconnect()
+            raise HTTPException(
+                status_code=409,
+                detail="원격 서버 연결이 끊겼습니다. 다시 연결하세요.",
             )
         return self.ssh
 
@@ -629,6 +638,12 @@ async def list_remote_objects(path: str = "") -> ObjectsResponse:
     ssh = _remote.require_ssh()
     try:
         result = sftp_engine.list_one_level(ssh, path)
+    except (paramiko.SSHException, EOFError, OSError) as exc:
+        # 작업 중 연결이 끊긴 경우 — 세션 정리 후 재연결 유도(409)
+        _remote.disconnect()
+        raise HTTPException(
+            status_code=409, detail="원격 서버 연결이 끊겼습니다. 다시 연결하세요."
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"원격 목록 조회 실패: {exc}")
 

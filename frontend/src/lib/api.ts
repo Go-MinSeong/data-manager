@@ -47,9 +47,20 @@ async function request<T>(
     } catch {
       // ignore
     }
-    throw new Error(msg)
+    const err = new Error(msg) as Error & { status?: number }
+    err.status = res.status
+    throw err
   }
   return res.json() as Promise<T>
+}
+
+/** 원격 연결이 끊겨 재연결이 필요한 에러인지 판별한다(409). */
+export function isDisconnectError(e: unknown): boolean {
+  return (
+    !!e &&
+    typeof e === 'object' &&
+    (e as { status?: number }).status === 409
+  )
 }
 
 // ── 자격증명 / 연결 ──────────────────────────────────────────────────────────

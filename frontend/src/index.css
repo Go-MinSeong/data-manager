@@ -8,6 +8,11 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
@@ -15,12 +20,21 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: #09090b;
   color: #e4e4e7;
+  /* WebKit 고무줄(바운스) 스크롤 방지 — 콘텐츠 범위 밖으로 튕기는 현상 제거 */
+  overscroll-behavior: none;
+  overflow: hidden;
 }
 
 #root {
   width: 100%;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
+}
+
+/* 내부 스크롤 영역이 부모 밖으로 스크롤 체이닝되지 않도록 */
+.overflow-y-auto,
+.overflow-auto {
+  overscroll-behavior: contain;
 }
 
 /* Custom scrollbar */

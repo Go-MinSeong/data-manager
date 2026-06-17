@@ -8,6 +8,7 @@ ThreadPoolExecutor로 전송 작업을 실행하고,
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import threading
@@ -18,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from s3manager import settings
 from s3manager.core import s3_engine
 from s3manager.core import sftp_engine
 
@@ -78,6 +80,25 @@ class JobState:
             "error": self.error,
         }
 
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "JobState":
+        """영속화된 dict(camelCase)에서 JobState를 복원한다(이력 표시용)."""
+        def _dt(v: str | None) -> datetime | None:
+            return datetime.fromisoformat(v) if v else None
+
+        job = cls(job_id=d["jobId"], kind=d.get("kind", "download"))
+        job.local_dir = d.get("localDir", "")
+        job.status = d.get("status", "done")
+        job.total_files = d.get("totalFiles", 0)
+        job.completed_files = d.get("completedFiles", 0)
+        job.failed_files = d.get("failedFiles", 0)
+        job.total_bytes = d.get("totalBytes", 0)
+        job.transferred_bytes = d.get("transferredBytes", 0)
+        job.started_at = _dt(d.get("startedAt"))
+        job.finished_at = _dt(d.get("finishedAt"))
+        job.error = d.get("error")
+        return job
+
 
 # ---------------------------------------------------------------------------
 # 잡 매니저 싱글톤
@@ -95,6 +116,44 @@ class JobManager:
         self._jobs: dict[str, JobState] = {}  # jobId → JobState
         self._lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._history_path = settings.APP_SUPPORT_DIR / "jobs.json"
+        self._load_persisted()
+
+    # ------------------------------------------------------------------
+    # 이력 영속화 (앱 재시작 후에도 완료 잡 유지)
+    # ------------------------------------------------------------------
+
+    def _load_persisted(self) -> None:
+        """디스크에 저장된 완료 잡 이력을 로드한다."""
+        try:
+            if not self._history_path.exists():
+                return
+            data = json.loads(self._history_path.read_text(encoding="utf-8"))
+            for d in data:
+                job = JobState.from_dict(d)
+                self._jobs[job.job_id] = job
+        except Exception as exc:
+            logger.debug("잡 이력 로드 실패: %s", exc)
+
+    def _persist(self) -> None:
+        """완료(done/error/canceled) 잡 이력을 디스크에 저장한다."""
+        try:
+            with self._lock:
+                terminal = [
+                    j for j in self._jobs.values()
+                    if j.status in ("done", "error", "canceled")
+                ]
+            terminal.sort(
+                key=lambda j: (j.finished_at or datetime.min.replace(tzinfo=timezone.utc)),
+                reverse=True,
+            )
+            data = [j.to_dict() for j in terminal[:MAX_JOB_HISTORY]]
+            self._history_path.parent.mkdir(parents=True, exist_ok=True)
+            self._history_path.write_text(
+                json.dumps(data, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception as exc:
+            logger.debug("잡 이력 저장 실패: %s", exc)
 
     def set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         """asyncio 이벤트 루프를 주입한다. 앱 시작 시 호출."""
@@ -243,6 +302,7 @@ class JobManager:
             job.error = str(exc)
             job.finished_at = datetime.now(tz=timezone.utc)
             self._push_event(job, {"type": "error", "message": str(exc)})
+            self._persist()
             return
 
         job.finished_at = datetime.now(tz=timezone.utc)
@@ -262,6 +322,7 @@ class JobManager:
                     "elapsedSec": round(elapsed, 2),
                 },
             )
+        self._persist()
 
     # ------------------------------------------------------------------
     # 공개 잡 생성 메서드
