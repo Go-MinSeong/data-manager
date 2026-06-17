@@ -18,11 +18,58 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #09090b;
-  color: #e4e4e7;
+  background: var(--color-zinc-950, #09090b);
+  color: var(--color-zinc-200, #e4e4e7);
   /* WebKit 고무줄(바운스) 스크롤 방지 — 콘텐츠 범위 밖으로 튕기는 현상 제거 */
   overscroll-behavior: none;
   overflow: hidden;
+}
+
+/* ── 테마 ────────────────────────────────────────────────────────────────────
+   Tailwind v4는 bg-zinc-950 등을 var(--color-zinc-950)로 컴파일한다.
+   [data-theme]에서 zinc 스케일·blue 액센트 변수를 오버라이드하면 컴포넌트
+   클래스를 바꾸지 않고도 전체 색이 테마를 따른다. (themes/*.md 토큰 기반)
+   매핑: zinc-950=캔버스 … zinc-200=주 텍스트, blue=액센트. 기본(다크)은 미지정. */
+
+[data-theme="tesla"] {
+  color-scheme: dark;
+  --color-zinc-950: #000000; --color-zinc-900: #0d0d0d; --color-zinc-800: #171717;
+  --color-zinc-700: #2a2a2a; --color-zinc-600: #8a8a8a; --color-zinc-500: #8a8a8a;
+  --color-zinc-400: #d0d0d0; --color-zinc-300: #d0d0d0; --color-zinc-200: #ffffff;
+  --color-zinc-100: #ffffff; --color-zinc-50: #ffffff;
+  --color-blue-600: #e82127; --color-blue-500: #ff3b41; --color-blue-400: #e82127;
+}
+[data-theme="sunset"] {
+  color-scheme: dark;
+  --color-zinc-950: #1a1412; --color-zinc-900: #241b18; --color-zinc-800: #2b211d;
+  --color-zinc-700: #3d2f28; --color-zinc-600: #b08e7e; --color-zinc-500: #b08e7e;
+  --color-zinc-400: #e8cdbf; --color-zinc-300: #e8cdbf; --color-zinc-200: #fbeee6;
+  --color-zinc-100: #fbeee6; --color-zinc-50: #fbeee6;
+  --color-blue-600: #ff7a59; --color-blue-500: #ff9676; --color-blue-400: #ff7a59;
+}
+[data-theme="figma"] {
+  color-scheme: light;
+  --color-zinc-950: #ffffff; --color-zinc-900: #f8f8f8; --color-zinc-800: #f0f0f0;
+  --color-zinc-700: #ebebeb; --color-zinc-600: #666666; --color-zinc-500: #666666;
+  --color-zinc-400: #444444; --color-zinc-300: #444444; --color-zinc-200: #0d0d0d;
+  --color-zinc-100: #0d0d0d; --color-zinc-50: #0d0d0d;
+  --color-blue-600: #18a0fb; --color-blue-500: #0d99e8; --color-blue-400: #18a0fb;
+}
+[data-theme="stripe"] {
+  color-scheme: light;
+  --color-zinc-950: #ffffff; --color-zinc-900: #f6f8fb; --color-zinc-800: #eef1f6;
+  --color-zinc-700: #e5e7eb; --color-zinc-600: #6b7280; --color-zinc-500: #6b7280;
+  --color-zinc-400: #3c4257; --color-zinc-300: #3c4257; --color-zinc-200: #0a0e27;
+  --color-zinc-100: #0a0e27; --color-zinc-50: #0a0e27;
+  --color-blue-600: #635bff; --color-blue-500: #5851e6; --color-blue-400: #635bff;
+}
+[data-theme="sage"] {
+  color-scheme: light;
+  --color-zinc-950: #f6f8f4; --color-zinc-900: #eef2ea; --color-zinc-800: #e6ece1;
+  --color-zinc-700: #d7e0cf; --color-zinc-600: #6b7a5e; --color-zinc-500: #6b7a5e;
+  --color-zinc-400: #38452f; --color-zinc-300: #38452f; --color-zinc-200: #1f2a1c;
+  --color-zinc-100: #1f2a1c; --color-zinc-50: #1f2a1c;
+  --color-blue-600: #2f7d4f; --color-blue-500: #36925c; --color-blue-400: #2f7d4f;
 }
 
 #root {
@@ -46,9 +93,9 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--color-zinc-700, #3f3f46);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--color-zinc-600, #52525b);
 }

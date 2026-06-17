@@ -9,6 +9,7 @@ import { RemoteTreeSidebar } from './components/RemoteTreeSidebar'
 import { RemoteMainPanel } from './components/RemoteMainPanel'
 import { TransferView } from './components/TransferView'
 import { ToastContainer } from './components/Toast'
+import { applyTheme, loadTheme } from './lib/themes'
 import * as api from './lib/api'
 
 const SIDEBAR_MIN = 180
@@ -18,6 +19,9 @@ function AppInner() {
   const [state, dispatch] = useReducer(appReducer, initialAppState)
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set())
   const [selectedRemoteDir, setSelectedRemoteDir] = useState<string>('')
+
+  // 저장된 테마 적용 (최초 1회)
+  useEffect(() => { applyTheme(loadTheme()) }, [])
 
   // 모드 전환 시 선택 항목 초기화 (S3 키와 원격 경로는 의미가 다르다)
   useEffect(() => {

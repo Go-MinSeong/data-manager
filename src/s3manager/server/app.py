@@ -671,6 +671,17 @@ async def set_remote_default_path(name: str, body: SetDefaultPathRequest) -> OkR
     return OkResponse(ok=True)
 
 
+@app.get("/api/remote/flat", response_model=FlatSummaryResponse)
+async def remote_flat(path: str = "") -> FlatSummaryResponse:
+    """원격 path 하위 전체 파일 수·총 바이트(추천/여유공간 비교용)."""
+    ssh = _remote.require_ssh()
+    try:
+        s = sftp_engine.flat_summary(ssh, path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"요약 조회 실패: {exc}")
+    return FlatSummaryResponse(total_files=s["totalFiles"], total_bytes=s["totalBytes"])
+
+
 @app.get("/api/remote/diskspace", response_model=DiskSpaceResponse)
 async def remote_diskspace(path: str = "") -> DiskSpaceResponse:
     """원격 path가 속한 파일시스템의 여유 공간(byte)."""
