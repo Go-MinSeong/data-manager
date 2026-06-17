@@ -8,6 +8,8 @@ import {
   Server,
   RefreshCw,
   AlertCircle,
+  Search,
+  X,
 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
@@ -41,6 +43,7 @@ export function RemoteTreeSidebar({
   const [loading, setLoading] = useState<Set<string>>(new Set())
   const [rootLoading, setRootLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState('')
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
@@ -69,6 +72,11 @@ export function RemoteTreeSidebar({
       setChildren(prev => new Map(prev).set(path || res.prefix, nodes))
       return res.prefix
     } catch (e) {
+      if (api.isDisconnectError(e)) {
+        dispatch({ type: 'SET_REMOTE_CONNECTION', payload: { connected: false } })
+        toast('원격 연결이 끊겼습니다. 다시 연결하세요.')
+        return
+      }
       toast(e instanceof Error ? e.message : '원격 목록 로드 실패')
     } finally {
       setLoading(prev => {
@@ -98,6 +106,11 @@ export function RemoteTreeSidebar({
       setChildren(prev => new Map(prev).set(res.prefix, nodes))
       onSelectDir?.(res.prefix)
     } catch (e) {
+      if (api.isDisconnectError(e)) {
+        dispatch({ type: 'SET_REMOTE_CONNECTION', payload: { connected: false } })
+        toast('원격 연결이 끊겼습니다. 다시 연결하세요.')
+        return
+      }
       const msg = e instanceof Error ? e.message : '원격 목록 로드 실패'
       setError(msg)
     } finally {
@@ -212,6 +225,10 @@ export function RemoteTreeSidebar({
   }
 
   const rootNodes = children.get(rootPath) ?? []
+  const q = filter.trim().toLowerCase()
+  const visibleRootNodes = q
+    ? rootNodes.filter(n => n.name.toLowerCase().includes(q))
+    : rootNodes
 
   return (
     <aside className="w-full h-full flex flex-col bg-zinc-950 border-r border-zinc-800">
@@ -234,6 +251,29 @@ export function RemoteTreeSidebar({
           </button>
         )}
       </div>
+
+      {/* 검색 */}
+      {connected && rootNodes.length > 0 && (
+        <div className="px-2 py-1.5 border-b border-zinc-800/60">
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-600" />
+            <input
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              placeholder="이름 검색..."
+              className="w-full bg-zinc-900 border border-zinc-800 rounded pl-7 pr-6 py-1 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
+            />
+            {filter && (
+              <button
+                onClick={() => setFilter('')}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 트리 내용 */}
       <div className="flex-1 overflow-y-auto py-1">
@@ -260,8 +300,13 @@ export function RemoteTreeSidebar({
             <Server size={20} />
             <span>비어 있습니다</span>
           </div>
+        ) : visibleRootNodes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-32 text-zinc-600 text-xs gap-2">
+            <Search size={18} />
+            <span>검색 결과가 없습니다</span>
+          </div>
         ) : (
-          <div>{renderNodes(rootNodes, 0)}</div>
+          <div>{renderNodes(visibleRootNodes, 0)}</div>
         )}
       </div>
     </aside>

@@ -69,25 +69,22 @@ else
     echo "아이콘 이미 존재 — 건너뜀 (재생성하려면 assets/ 에서 삭제)"
 fi
 
-# iconutil 로 고품질 .icns 재생성 (macOS 전용, 선택사항)
-if command -v iconutil &> /dev/null && [ ! -f "assets/app_icon_hires.icns" ]; then
+# iconutil 로 고품질 .icns 재생성 (macOS 전용).
+# dock 아이콘이 최신 디자인을 반영하도록 컬러 app_icon.png에서 매번 iconset을 재생성한다.
+# (이전엔 캐시된 iconset/모노크롬 tray에서 만들어 dock 아이콘이 갱신되지 않았음)
+if command -v iconutil &> /dev/null && command -v sips &> /dev/null && [ -f "assets/app_icon.png" ]; then
     ICONSET_DIR="assets/app_icon.iconset"
-    if [ ! -d "${ICONSET_DIR}" ]; then
-        mkdir -p "${ICONSET_DIR}"
-        # macOS iconset 표준 크기 복사
-        for size in 16 32 64 128 256 512; do
-            src="assets/tray_${size}.png"
-            if [ -f "${src}" ]; then
-                cp "${src}" "${ICONSET_DIR}/icon_${size}x${size}.png"
-                # @2x (Retina) — 같은 이미지로 대체
-                cp "${src}" "${ICONSET_DIR}/icon_$((size/2))x$((size/2))@2x.png" 2>/dev/null || true
-            fi
-        done
-        # 512@2x
-        [ -f "assets/tray_512.png" ] && cp "assets/tray_512.png" "${ICONSET_DIR}/icon_512x512@2x.png" || true
-    fi
+    rm -rf "${ICONSET_DIR}"
+    mkdir -p "${ICONSET_DIR}"
+    for size in 16 32 128 256 512; do
+        sips -z "${size}" "${size}" "assets/app_icon.png" \
+            --out "${ICONSET_DIR}/icon_${size}x${size}.png" > /dev/null 2>&1
+        d2=$((size * 2))
+        sips -z "${d2}" "${d2}" "assets/app_icon.png" \
+            --out "${ICONSET_DIR}/icon_${size}x${size}@2x.png" > /dev/null 2>&1
+    done
     iconutil -c icns "${ICONSET_DIR}" -o "assets/app_icon.icns" && \
-        echo "iconutil 로 .icns 재생성 완료" || \
+        echo "iconutil 로 .icns 재생성 완료 (컬러 app_icon.png 기반)" || \
         echo "경고: iconutil 실패, PIL 생성 .icns 사용"
 fi
 

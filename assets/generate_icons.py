@@ -94,7 +94,7 @@ def draw_cloud_s3(size: int, cutout: bool = False, text: str = "S3") -> Image.Im
 
 
 TRAY_TEXT = "DATA"  # 메뉴바 아이콘 글자
-APP_TEXT = "S3"     # 앱(dock/.app) 아이콘 글자
+APP_TEXT = "DATA"   # 앱(dock/.app) 아이콘 글자
 
 
 def main() -> None:

@@ -26,6 +26,11 @@ def fake_download(s3_client, bucket, local_dir, *, prefixes=None, keys=None,
 
 
 async def main():
+    import tempfile
+    from pathlib import Path
+    # 실제 이력 파일을 건드리지 않도록 임시 경로로 격리
+    job_manager._history_path = Path(tempfile.mkdtemp(prefix="qa-jobs-")) / "jobs.json"
+
     loop = asyncio.get_running_loop()
     job_manager.set_event_loop(loop)
     # 전송 함수 교체

@@ -67,6 +67,11 @@ export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
       setJobId(res.jobId)
       toast('다운로드를 시작했습니다.', 'success')
     } catch (e) {
+      if (api.isDisconnectError(e)) {
+        dispatch({ type: 'SET_REMOTE_CONNECTION', payload: { connected: false } })
+        toast('원격 연결이 끊겼습니다. 다시 연결하세요.')
+        return
+      }
       toast(e instanceof Error ? e.message : '다운로드 시작 실패')
     }
   }
