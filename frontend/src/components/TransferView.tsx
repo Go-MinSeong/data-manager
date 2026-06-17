@@ -38,7 +38,9 @@ export function TransferView() {
   const [destPrefix, setDestPrefix] = useState('')
   const [destBDir, setDestBDir] = useState('')        // 목적지(원격B) — remote-to-remote
   const [maxWorkers, setMaxWorkers] = useState(4)
-  const [jobId, setJobId] = useState<string | null>(null)
+  const jobId = state.activeJobs['transfer'] ?? null
+  const setJobId = (id: string | null) =>
+    dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'transfer', id } })
   const { state: jobState, close: closeJob } = useJob(jobId)
 
   const [freeSpace, setFreeSpace] = useState<number | null>(null)

@@ -14,7 +14,9 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
   const { state, dispatch } = useAppStore()
   const [localDir, setLocalDir] = useState('')
   const [maxWorkers, setMaxWorkers] = useState(4)
-  const [jobId, setJobId] = useState<string | null>(null)
+  const jobId = state.activeJobs['download'] ?? null
+  const setJobId = (id: string | null) =>
+    dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'download', id } })
   const [preview, setPreview] = useState<{ totalFiles: number; totalBytes: number } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [freeSpace, setFreeSpace] = useState<number | null>(null)

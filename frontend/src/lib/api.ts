@@ -226,6 +226,9 @@ export const getLocalDiskSpace = (path?: string) => {
   return request<{ total: number; free: number; used: number }>('GET', `/local/diskspace${qs}`)
 }
 
+export const getLocalFlat = (paths: string[]) =>
+  request<{ totalFiles: number; totalBytes: number }>('POST', '/local/flat', { paths })
+
 export const measureRemote = (path?: string) =>
   request<{ uploadBps: number; downloadBps: number; sizeBytes: number }>(
     'POST',

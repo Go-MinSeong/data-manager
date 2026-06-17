@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { FolderOpen, Download } from 'lucide-react'
+import { FolderOpen, Download, Gauge } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
 import { useAppStore } from '../store/appStore'
 import { JobProgress } from './JobProgress'
+import { formatSpeed } from './ProgressBar'
 
 interface RemoteDownloadPanelProps {
   checkedKeys: Set<string>
@@ -13,8 +14,36 @@ export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
   const { state, dispatch } = useAppStore()
   const [localDir, setLocalDir] = useState('')
   const [maxWorkers, setMaxWorkers] = useState(4)
-  const [jobId, setJobId] = useState<string | null>(null)
+  const [measuring, setMeasuring] = useState(false)
+  const [speed, setSpeed] = useState<{ up: number; down: number } | null>(null)
+  const jobId = state.activeJobs['remote-download'] ?? null
+  const setJobId = (id: string | null) =>
+    dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'remote-download', id } })
   const { state: jobState, close: closeJob } = useJob(jobId)
+
+  const handleMeasure = async () => {
+    setMeasuring(true); setSpeed(null)
+    try {
+      const r = await api.measureRemote()
+      setSpeed({ up: r.uploadBps, down: r.downloadBps })
+    } catch (e) {
+      dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message: e instanceof Error ? e.message : '속도 측정 실패', variant: 'error' } })
+    } finally { setMeasuring(false) }
+  }
+
+  const handleRecommend = async () => {
+    if (checkedKeys.size === 0) return
+    try {
+      let tf = 0, tb = 0
+      const dirs = [...checkedKeys].filter(k => k.endsWith('/'))
+      tf = [...checkedKeys].filter(k => !k.endsWith('/')).length
+      for (const d of dirs) {
+        const r = await api.getRemoteFlat(d.replace(/\/$/, ''))
+        tf += r.totalFiles; tb += r.totalBytes
+      }
+      setMaxWorkers(api.recommendWorkers(tf, tb))
+    } catch { /* 무시 */ }
+  }
 
   useEffect(() => {
     api.getPreferences()
@@ -120,11 +149,37 @@ export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
           </div>
         </div>
 
+        {/* 링크 속도 측정 (Mac ↔ 원격) */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={handleMeasure}
+            disabled={measuring}
+            className="flex items-center gap-1.5 text-xs text-zinc-300 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            <Gauge size={13} className={measuring ? 'animate-pulse' : ''} />
+            {measuring ? '측정 중...' : '링크 속도 측정'}
+          </button>
+          {speed && (
+            <span className="text-[11px] text-zinc-400">
+              ↑ {formatSpeed(speed.up)} · ↓ {formatSpeed(speed.down)}
+            </span>
+          )}
+        </div>
+
         {/* 동시 다운로드 수 */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-zinc-400">동시 다운로드 수</label>
-            <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRecommend}
+                disabled={checkedKeys.size === 0}
+                className="text-[11px] text-blue-400 hover:text-blue-300 disabled:text-zinc-600"
+              >
+                추천
+              </button>
+              <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+            </div>
           </div>
           <input
             type="range"

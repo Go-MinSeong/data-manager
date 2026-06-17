@@ -10,7 +10,9 @@ export function UploadPanel() {
   const [prefix, setPrefix] = useState('')
   const [localPaths, setLocalPaths] = useState<string[]>([])
   const [maxWorkers, setMaxWorkers] = useState(4)
-  const [jobId, setJobId] = useState<string | null>(null)
+  const jobId = state.activeJobs['upload'] ?? null
+  const setJobId = (id: string | null) =>
+    dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'upload', id } })
   const { state: jobState, close: closeJob } = useJob(jobId)
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
@@ -34,6 +36,17 @@ export function UploadPanel() {
 
   const removePath = (path: string) => {
     setLocalPaths(prev => prev.filter(p => p !== path))
+  }
+
+  const handleRecommend = async () => {
+    if (localPaths.length === 0) { toast('업로드할 파일을 먼저 선택하세요.'); return }
+    try {
+      const r = await api.getLocalFlat(localPaths)
+      setMaxWorkers(api.recommendWorkers(r.totalFiles, r.totalBytes))
+      toast('파일 수·크기에 맞춰 동시 수를 추천했습니다.', 'info')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '추천 계산 실패')
+    }
   }
 
   const handleUpload = async () => {
@@ -125,7 +138,16 @@ export function UploadPanel() {
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-zinc-400">동시 업로드 수</label>
-            <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRecommend}
+                disabled={localPaths.length === 0}
+                className="text-[11px] text-blue-400 hover:text-blue-300 disabled:text-zinc-600"
+              >
+                추천
+              </button>
+              <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+            </div>
           </div>
           <input
             type="range"

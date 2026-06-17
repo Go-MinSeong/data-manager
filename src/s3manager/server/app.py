@@ -50,6 +50,7 @@ from s3manager.server.models import (
     RemoteDownloadRequest,
     RemoteProfile,
     RemoteProfilesResponse,
+    LocalFlatRequest,
     RemoteToRemoteRequest,
     RemoteToS3Request,
     RemoteUploadRequest,
@@ -708,6 +709,32 @@ async def remote_measure(body: SetDefaultPathRequest) -> MeasureResponse:
     return MeasureResponse(
         upload_bps=res["uploadBps"], download_bps=res["downloadBps"], size_bytes=res["sizeBytes"]
     )
+
+
+@app.post("/api/local/flat", response_model=FlatSummaryResponse)
+async def local_flat(body: LocalFlatRequest) -> FlatSummaryResponse:
+    """로컬 파일/폴더 목록의 전체 파일 수·총 바이트(업로드 추천용)."""
+    import os
+    total_files = 0
+    total_bytes = 0
+    for raw in body.paths:
+        p = os.path.expanduser(raw)
+        try:
+            if os.path.isfile(p):
+                total_files += 1
+                total_bytes += os.path.getsize(p)
+            elif os.path.isdir(p):
+                for dirpath, _dirs, files in os.walk(p):
+                    for fn in files:
+                        fp = os.path.join(dirpath, fn)
+                        try:
+                            total_bytes += os.path.getsize(fp)
+                            total_files += 1
+                        except OSError:
+                            pass
+        except OSError:
+            pass
+    return FlatSummaryResponse(total_files=total_files, total_bytes=total_bytes)
 
 
 @app.get("/api/local/diskspace", response_model=DiskSpaceResponse)
