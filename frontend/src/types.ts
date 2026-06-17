@@ -27,6 +27,8 @@ export type JobKind =
   | 'sync'
   | 'remote-download'
   | 'remote-upload'
+  | 's3-to-remote'
+  | 'remote-to-s3'
 export type JobStatus = 'pending' | 'running' | 'done' | 'error' | 'canceled'
 
 export interface Job {
@@ -69,8 +71,8 @@ export interface ConnectionState {
   region?: string
 }
 
-// 데이터 소스 모드 (S3 / 원격 SFTP 서버)
-export type SourceMode = 's3' | 'remote'
+// 데이터 소스 모드 (S3 / 원격 SFTP 서버 / 전송)
+export type SourceMode = 's3' | 'remote' | 'transfer'
 
 // 원격(SFTP) 서버 프로파일 (비밀 미포함)
 export interface RemoteProfile {

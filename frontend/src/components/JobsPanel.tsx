@@ -22,6 +22,8 @@ const KIND_LABEL: Record<string, string> = {
   sync: '동기화',
   'remote-download': '원격 다운로드',
   'remote-upload': '원격 업로드',
+  's3-to-remote': 'S3→원격',
+  'remote-to-s3': '원격→S3',
 }
 
 const KIND_ICON: Record<string, React.ReactNode> = {
@@ -30,6 +32,8 @@ const KIND_ICON: Record<string, React.ReactNode> = {
   sync: <SyncIcon size={13} />,
   'remote-download': <Download size={13} />,
   'remote-upload': <Upload size={13} />,
+  's3-to-remote': <SyncIcon size={13} />,
+  'remote-to-s3': <SyncIcon size={13} />,
 }
 
 const STATUS_COLOR: Record<string, string> = {

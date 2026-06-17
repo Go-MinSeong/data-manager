@@ -47,7 +47,9 @@ from s3manager.server.models import (
     RemoteDownloadRequest,
     RemoteProfile,
     RemoteProfilesResponse,
+    RemoteToS3Request,
     RemoteUploadRequest,
+    S3ToRemoteRequest,
     RevealRequest,
     S3Folder,
     S3Object,
@@ -683,6 +685,40 @@ async def start_remote_upload(body: RemoteUploadRequest) -> JobIdResponse:
         ssh,
         body.remote_dir,
         body.local_paths,
+        max_workers=body.max_workers,
+    )
+    return JobIdResponse(job_id=job_id)
+
+
+# ---------------------------------------------------------------------------
+# S3 ↔ 원격 전송 (Mac 경유 없이 직통 우선, 양쪽 세션 모두 필요)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/transfer/s3-to-remote", response_model=JobIdResponse)
+async def start_s3_to_remote(body: S3ToRemoteRequest) -> JobIdResponse:
+    """S3 → 원격 전송 잡을 생성한다. S3·원격 세션 모두 연결 필요."""
+    if not body.prefixes and not body.keys:
+        raise HTTPException(status_code=422, detail="prefixes 또는 keys 중 하나가 필요합니다.")
+    client = _session.require_client()
+    ssh = _remote.require_ssh()
+    job_id = job_manager.submit_s3_to_remote(
+        client, ssh, body.bucket,
+        prefixes=body.prefixes, keys=body.keys, remote_dir=body.remote_dir,
+        max_workers=body.max_workers,
+    )
+    return JobIdResponse(job_id=job_id)
+
+
+@app.post("/api/transfer/remote-to-s3", response_model=JobIdResponse)
+async def start_remote_to_s3(body: RemoteToS3Request) -> JobIdResponse:
+    """원격 → S3 전송 잡을 생성한다. S3·원격 세션 모두 연결 필요."""
+    if not body.remote_dirs and not body.keys:
+        raise HTTPException(status_code=422, detail="remoteDirs 또는 keys 중 하나가 필요합니다.")
+    client = _session.require_client()
+    ssh = _remote.require_ssh()
+    job_id = job_manager.submit_remote_to_s3(
+        ssh, client, body.bucket,
+        remote_dirs=body.remote_dirs, keys=body.keys, prefix=body.prefix,
         max_workers=body.max_workers,
     )
     return JobIdResponse(job_id=job_id)

@@ -219,6 +219,26 @@ class RemoteUploadRequest(CamelModel):
     max_workers: int = 4
 
 
+class S3ToRemoteRequest(CamelModel):
+    """S3 → 원격 전송."""
+
+    bucket: str
+    prefixes: list[str] | None = None
+    keys: list[str] | None = None
+    remote_dir: str
+    max_workers: int = 4
+
+
+class RemoteToS3Request(CamelModel):
+    """원격 → S3 전송."""
+
+    remote_dirs: list[str] | None = None
+    keys: list[str] | None = None
+    bucket: str
+    prefix: str = ""
+    max_workers: int = 4
+
+
 # ---------------------------------------------------------------------------
 # 로컬 / 시스템
 # ---------------------------------------------------------------------------

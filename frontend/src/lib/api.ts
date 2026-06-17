@@ -210,6 +210,24 @@ export const startRemoteUpload = (body: {
   maxWorkers?: number
 }) => request<{ jobId: string }>('POST', '/remote/upload', body)
 
+// ── S3 ↔ 원격 전송 ────────────────────────────────────────────────────────────
+
+export const startS3ToRemote = (body: {
+  bucket: string
+  prefixes?: string[]
+  keys?: string[]
+  remoteDir: string
+  maxWorkers?: number
+}) => request<{ jobId: string }>('POST', '/transfer/s3-to-remote', body)
+
+export const startRemoteToS3 = (body: {
+  remoteDirs?: string[]
+  keys?: string[]
+  bucket: string
+  prefix?: string
+  maxWorkers?: number
+}) => request<{ jobId: string }>('POST', '/transfer/remote-to-s3', body)
+
 // ── 잡 ────────────────────────────────────────────────────────────────────────
 
 export const getJobs = () => request<{ jobs: Job[] }>('GET', '/jobs')
