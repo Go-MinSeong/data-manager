@@ -10,6 +10,8 @@ import {
   AlertCircle,
   Search,
   X,
+  ArrowUp,
+  CornerDownLeft,
 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
@@ -44,6 +46,7 @@ export function RemoteTreeSidebar({
   const [rootLoading, setRootLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
+  const [pathInput, setPathInput] = useState('')  // 편집 가능한 루트 경로
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
@@ -87,11 +90,12 @@ export function RemoteTreeSidebar({
     }
   }, [loading])
 
-  const loadRoot = useCallback(async () => {
+  // path 미지정 시 홈 디렉터리(기본), 지정 시 해당 절대 경로를 트리 루트로 로드한다.
+  const loadRoot = useCallback(async (path?: string) => {
     setRootLoading(true)
     setError(null)
     try {
-      const res = await api.getRemoteObjects()
+      const res = await api.getRemoteObjects(path || undefined)
       const nodes: TreeNode[] = [
         ...res.folders.map(f => ({ key: f.key, name: f.name, isFolder: true as const })),
         ...res.objects.map(o => ({
@@ -103,7 +107,9 @@ export function RemoteTreeSidebar({
         })),
       ]
       setRootPath(res.prefix)
-      setChildren(prev => new Map(prev).set(res.prefix, nodes))
+      setPathInput(res.prefix)
+      setExpanded(new Set())
+      setChildren(new Map([[res.prefix, nodes]]))
       onSelectDir?.(res.prefix)
     } catch (e) {
       if (api.isDisconnectError(e)) {
@@ -111,8 +117,8 @@ export function RemoteTreeSidebar({
         toast('원격 연결이 끊겼습니다. 다시 연결하세요.')
         return
       }
-      const msg = e instanceof Error ? e.message : '원격 목록 로드 실패'
-      setError(msg)
+      // 경로 문제(400 등)는 연결을 유지하고 토스트만 — 직전 경로 유지
+      toast(e instanceof Error ? e.message : '경로를 열 수 없습니다')
     } finally {
       setRootLoading(false)
     }
@@ -232,23 +238,58 @@ export function RemoteTreeSidebar({
 
   return (
     <aside className="w-full h-full flex flex-col bg-zinc-950 border-r border-zinc-800">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
-        <span className="text-xs font-medium text-zinc-400 truncate" title={rootPath}>
-          {rootPath || '원격 탐색기'}
-        </span>
+      {/* 헤더: 루트 경로 설정 */}
+      <div className="px-2 py-2 border-b border-zinc-800 space-y-1.5">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-medium text-zinc-400">원격 경로</span>
+          {connected && (
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => {
+                  const parent =
+                    rootPath === '/' || !rootPath
+                      ? '/'
+                      : rootPath.replace(/\/[^/]+\/?$/, '') || '/'
+                  void loadRoot(parent)
+                }}
+                disabled={rootLoading || rootPath === '/'}
+                title="상위 폴더로"
+                className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 disabled:opacity-40 transition-colors"
+              >
+                <ArrowUp size={12} />
+              </button>
+              <button
+                onClick={() => void loadRoot(rootPath)}
+                disabled={rootLoading}
+                title="새로고침"
+                className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+              >
+                <RefreshCw size={12} className={rootLoading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          )}
+        </div>
         {connected && (
-          <button
-            onClick={() => {
-              setChildren(new Map())
-              setExpanded(new Set())
-              void loadRoot()
-            }}
-            disabled={rootLoading}
-            className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors shrink-0"
-          >
-            <RefreshCw size={12} className={rootLoading ? 'animate-spin' : ''} />
-          </button>
+          <div className="relative">
+            <input
+              value={pathInput}
+              onChange={e => setPathInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void loadRoot(pathInput.trim())
+              }}
+              placeholder="/path/to/dir (Enter로 이동)"
+              spellCheck={false}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded pl-2 pr-7 py-1 text-xs text-zinc-200 font-mono placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
+            />
+            <button
+              onClick={() => void loadRoot(pathInput.trim())}
+              disabled={rootLoading}
+              title="이동"
+              className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded text-zinc-500 hover:text-zinc-200"
+            >
+              <CornerDownLeft size={12} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -286,7 +327,7 @@ export function RemoteTreeSidebar({
           <div className="flex flex-col items-center justify-center h-32 text-red-500 text-xs gap-2 px-3">
             <AlertCircle size={16} />
             <span className="text-center">{error}</span>
-            <button onClick={loadRoot} className="text-blue-400 hover:text-blue-300 underline">
+            <button onClick={() => void loadRoot(rootPath || undefined)} className="text-blue-400 hover:text-blue-300 underline">
               다시 시도
             </button>
           </div>

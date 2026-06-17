@@ -122,6 +122,24 @@ def main():
         assert "data" in fnames, objs
         assert objs["folders"][0]["isFolder"] is True and objs["folders"][0]["key"].endswith("/")
 
+        # 2b) 서브경로를 루트로 지정 (경로 설정 기능)
+        sub = _req("GET", "/api/remote/objects?path=/data")
+        subnames = {f["name"] for f in sub["folders"]} | {
+            __import__("os").path.basename(o["key"]) for o in sub["objects"]
+        }
+        print("objects(/data):", subnames, "| prefix:", sub["prefix"])
+        assert sub["prefix"] == "/data" and "a.txt" in subnames, sub
+
+        # 2c) 잘못된 경로 → 연결은 유지되고 400(끊김 409 아님)
+        import urllib.error
+        try:
+            _req("GET", "/api/remote/objects?path=/no/such/dir")
+            raise AssertionError("잘못된 경로인데 성공함")
+        except urllib.error.HTTPError as he:
+            print("bad path status:", he.code)
+            assert he.code == 400, f"기대 400, 실제 {he.code}"
+        assert _req("GET", "/api/remote/connection")["connected"] is True, "경로 오류로 연결이 끊김"
+
         # 3) 업로드 (로컬 → 원격)
         up_src = tempfile.mkdtemp(prefix="qa-http-up-")
         Path(up_src, "u.bin").write_bytes(b"U" * 3000)

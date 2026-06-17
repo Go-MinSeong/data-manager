@@ -638,14 +638,15 @@ async def list_remote_objects(path: str = "") -> ObjectsResponse:
     ssh = _remote.require_ssh()
     try:
         result = sftp_engine.list_one_level(ssh, path)
-    except (paramiko.SSHException, EOFError, OSError) as exc:
-        # 작업 중 연결이 끊긴 경우 — 세션 정리 후 재연결 유도(409)
-        _remote.disconnect()
-        raise HTTPException(
-            status_code=409, detail="원격 서버 연결이 끊겼습니다. 다시 연결하세요."
-        )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"원격 목록 조회 실패: {exc}")
+        # transport가 죽었으면 연결 끊김(409, 재연결 유도), 살아 있으면 경로 문제(400).
+        transport = ssh.get_transport()
+        if transport is None or not transport.is_active():
+            _remote.disconnect()
+            raise HTTPException(
+                status_code=409, detail="원격 서버 연결이 끊겼습니다. 다시 연결하세요."
+            )
+        raise HTTPException(status_code=400, detail=f"경로를 열 수 없습니다: {exc}")
 
     folders = [S3Folder(**f) for f in result["folders"]]
     objects = [
