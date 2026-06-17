@@ -122,6 +122,23 @@ export const getFlatObjects = (bucket: string, prefix?: string) => {
   )
 }
 
+export const getRemoteFlat = (path?: string) => {
+  const qs = path ? `?path=${encodeURIComponent(path)}` : ''
+  return request<{ totalFiles: number; totalBytes: number }>('GET', `/remote/flat${qs}`)
+}
+
+/** 파일 수·평균 크기로 동시 전송 수를 추천한다(작은 파일 多→높게, 큰 파일→낮게). */
+export function recommendWorkers(fileCount: number, totalBytes: number): number {
+  if (fileCount <= 1) return 2
+  const avg = totalBytes / fileCount
+  const MB = 1024 * 1024
+  if (avg < 0.25 * MB) return 16
+  if (avg < 4 * MB) return 10
+  if (avg < 32 * MB) return 6
+  if (avg < 256 * MB) return 4
+  return 2
+}
+
 // ── 전송 작업 ────────────────────────────────────────────────────────────────
 
 export const startDownload = (body: {

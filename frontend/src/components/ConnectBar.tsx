@@ -1,11 +1,14 @@
-import { Wifi, WifiOff, User, Globe, Server, Cloud, LogOut, ArrowLeftRight } from 'lucide-react'
+import { useState } from 'react'
+import { Wifi, WifiOff, User, Globe, Server, Cloud, LogOut, ArrowLeftRight, Settings } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../lib/api'
+import { SettingsPanel } from './SettingsPanel'
 import type { SourceMode } from '../types'
 
 export function ConnectBar() {
   const { state, dispatch } = useAppStore()
   const { mode, connection, remoteConnection } = state
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const modes: { id: SourceMode; label: string; icon: React.ReactNode }[] = [
     { id: 's3', label: 'S3', icon: <Cloud size={12} /> },
@@ -38,6 +41,7 @@ export function ConnectBar() {
   }
 
   return (
+    <>
     <header className="h-10 flex items-center gap-3 px-4 bg-zinc-950 border-b border-zinc-800 shrink-0 select-none">
       {/* 로고 */}
       <div className="flex items-center gap-2 font-semibold text-sm text-zinc-200 mr-1">
@@ -131,16 +135,27 @@ export function ConnectBar() {
         </span>
       )}
 
-      {isConnected && (
+      <div className="ml-auto flex items-center gap-1">
+        {isConnected && (
+          <button
+            onClick={handleDisconnect}
+            title={mode === 's3' ? '연결 해제' : '연결 해제 (다른 서버로 전환)'}
+            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
+          >
+            <LogOut size={12} />
+            연결 해제
+          </button>
+        )}
         <button
-          onClick={handleDisconnect}
-          title={mode === 's3' ? '연결 해제' : '연결 해제 (다른 서버로 전환)'}
-          className="ml-auto flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
+          onClick={() => setSettingsOpen(true)}
+          title="설정"
+          className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
         >
-          <LogOut size={12} />
-          연결 해제
+          <Settings size={14} />
         </button>
-      )}
+      </div>
     </header>
+    {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+    </>
   )
 }

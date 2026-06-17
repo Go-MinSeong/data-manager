@@ -7,6 +7,9 @@ import { JobProgress } from './JobProgress'
 import { TreeSidebar } from './TreeSidebar'
 import { RemoteTreeSidebar } from './RemoteTreeSidebar'
 import { RemoteFolderBrowser } from './RemoteFolderBrowser'
+import { JobsPanel } from './JobsPanel'
+import { ArrowLeftRight as TransferIcon } from 'lucide-react'
+import { History } from 'lucide-react'
 import { formatBytes, formatSpeed } from './ProgressBar'
 
 type Direction = 's3-to-remote' | 'remote-to-s3'
@@ -30,6 +33,8 @@ export function TransferView() {
   const [freeSpace, setFreeSpace] = useState<number | null>(null)
   const [measuring, setMeasuring] = useState(false)
   const [speed, setSpeed] = useState<{ up: number; down: number } | null>(null)
+  const [tab, setTab] = useState<'transfer' | 'jobs'>('transfer')
+  const [transferBytes, setTransferBytes] = useState<number | null>(null)
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
@@ -68,6 +73,39 @@ export function TransferView() {
       toast(e instanceof Error ? e.message : '속도 측정 실패')
     } finally {
       setMeasuring(false)
+    }
+  }
+
+  const handleRecommend = async () => {
+    if (checkedKeys.size === 0) {
+      toast('전송할 항목을 먼저 선택하세요.')
+      return
+    }
+    try {
+      let tf = 0
+      let tb = 0
+      const folders = [...checkedKeys].filter(k => k.endsWith('/'))
+      const files = [...checkedKeys].filter(k => !k.endsWith('/'))
+      tf = files.length
+      if (direction === 's3-to-remote') {
+        if (!state.selectedBucket) { toast('소스 버킷을 선택하세요.'); return }
+        for (const p of folders) {
+          const r = await api.getFlatObjects(state.selectedBucket, p)
+          tf += r.totalFiles
+          tb += r.totalBytes
+        }
+      } else {
+        for (const d of folders) {
+          const r = await api.getRemoteFlat(d.replace(/\/$/, ''))
+          tf += r.totalFiles
+          tb += r.totalBytes
+        }
+      }
+      setTransferBytes(tb)
+      setMaxWorkers(api.recommendWorkers(tf, tb))
+      toast('파일 수·크기에 맞춰 동시 수를 추천했습니다.', 'info')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '추천 계산 실패')
     }
   }
 
@@ -167,6 +205,32 @@ export function TransferView() {
 
   return (
     <div className="flex flex-col flex-1 min-w-0 bg-zinc-900">
+      {/* 탭: 전송 / 작업 이력 */}
+      <div className="flex gap-0.5 px-3 pt-3 border-b border-zinc-800 shrink-0">
+        {([['transfer', '전송', <TransferIcon size={14} />], ['jobs', '작업 이력', <History size={14} />]] as const).map(
+          ([id, label, icon]) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg transition-colors -mb-px ${
+                tab === id
+                  ? 'bg-zinc-800 text-zinc-100 border border-b-zinc-800 border-zinc-700'
+                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 border border-transparent'
+              }`}
+            >
+              {icon}
+              {label}
+            </button>
+          ),
+        )}
+      </div>
+
+      {tab === 'jobs' ? (
+        <div className="flex-1 overflow-y-auto">
+          <JobsPanel />
+        </div>
+      ) : (
+        <>
       {/* 방향 토글 */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-800 shrink-0">
         <span className="text-xs text-zinc-500">방향</span>
@@ -233,10 +297,15 @@ export function TransferView() {
                 value={remoteDir}
                 onChange={p => { setRemoteDir(p); setRemoteTouched(true) }}
               />
-              <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-zinc-500">
-                <HardDrive size={11} />
-                여유 공간:{' '}
-                {freeSpace == null ? '—' : <span className="text-zinc-300">{formatBytes(freeSpace)}</span>}
+              <div className="flex items-center gap-3 mt-1.5 text-[11px] text-zinc-500">
+                <span className="flex items-center gap-1.5">
+                  <HardDrive size={11} />
+                  여유 공간:{' '}
+                  {freeSpace == null ? '—' : <span className="text-zinc-300">{formatBytes(freeSpace)}</span>}
+                </span>
+                {transferBytes != null && freeSpace != null && transferBytes > freeSpace && (
+                  <span className="text-amber-400">⚠ 공간 부족 가능 (전송 {formatBytes(transferBytes)})</span>
+                )}
               </div>
             </div>
           ) : (
@@ -287,7 +356,16 @@ export function TransferView() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs text-zinc-400">동시 전송 수</label>
-              <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRecommend}
+                  disabled={checkedKeys.size === 0}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 disabled:text-zinc-600"
+                >
+                  추천
+                </button>
+                <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+              </div>
             </div>
             <input
               type="range" min={1} max={16} value={maxWorkers}
@@ -318,6 +396,8 @@ export function TransferView() {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }

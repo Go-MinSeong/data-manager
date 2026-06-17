@@ -70,11 +70,19 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
         totalBytes += r.totalBytes
       }
       setPreview({ totalFiles, totalBytes })
+      return { totalFiles, totalBytes }
     } catch (e) {
       toast(e instanceof Error ? e.message : '미리보기 실패')
     } finally {
       setPreviewLoading(false)
     }
+  }
+
+  const handleRecommend = async () => {
+    const s = preview ?? (await handlePreview())
+    if (!s) return
+    setMaxWorkers(api.recommendWorkers(s.totalFiles, s.totalBytes))
+    toast('파일 수·크기에 맞춰 동시 수를 추천했습니다.', 'info')
   }
 
   const handleDownload = async () => {
@@ -183,7 +191,16 @@ export function DownloadPanel({ checkedKeys }: DownloadPanelProps) {
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-zinc-400">동시 다운로드 수</label>
-            <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRecommend}
+                disabled={checkedKeys.size === 0}
+                className="text-[11px] text-blue-400 hover:text-blue-300 disabled:text-zinc-600"
+              >
+                추천
+              </button>
+              <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+            </div>
           </div>
           <input
             type="range"
