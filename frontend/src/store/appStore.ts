@@ -21,6 +21,8 @@ export interface AppState {
   activeTab: PanelTab
   selectedBucket: string | null
   toasts: ToastItem[]
+  /** 패널별 진행 중 잡 — 모드/탭 전환으로 패널이 언마운트돼도 유지 */
+  activeJobs: Record<string, string | null>
 }
 
 export type AppAction =
@@ -31,6 +33,7 @@ export type AppAction =
   | { type: 'SET_BUCKET'; payload: string | null }
   | { type: 'ADD_TOAST'; payload: ToastItem }
   | { type: 'REMOVE_TOAST'; payload: string }
+  | { type: 'SET_ACTIVE_JOB'; payload: { key: string; id: string | null } }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -49,6 +52,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, toasts: [...state.toasts, action.payload] }
     case 'REMOVE_TOAST':
       return { ...state, toasts: state.toasts.filter(t => t.id !== action.payload) }
+    case 'SET_ACTIVE_JOB':
+      return {
+        ...state,
+        activeJobs: { ...state.activeJobs, [action.payload.key]: action.payload.id },
+      }
     default:
       return state
   }
@@ -61,6 +69,7 @@ export const initialAppState: AppState = {
   activeTab: 'download',
   selectedBucket: null,
   toasts: [],
+  activeJobs: {},
 }
 
 export interface AppContextValue {

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { FilePlus, Upload, X } from 'lucide-react'
+import { FilePlus, Upload, X, Gauge } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
 import { useAppStore } from '../store/appStore'
 import { JobProgress } from './JobProgress'
+import { formatSpeed } from './ProgressBar'
 
 interface RemoteUploadPanelProps {
   selectedDir?: string
@@ -15,7 +16,9 @@ export function RemoteUploadPanel({ selectedDir }: RemoteUploadPanelProps) {
   const [touched, setTouched] = useState(false)
   const [localPaths, setLocalPaths] = useState<string[]>([])
   const [maxWorkers, setMaxWorkers] = useState(4)
-  const [jobId, setJobId] = useState<string | null>(null)
+  const jobId = state.activeJobs['remote-upload'] ?? null
+  const setJobId = (id: string | null) =>
+    dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'remote-upload', id } })
   const { state: jobState, close: closeJob } = useJob(jobId)
 
   // 사용자가 직접 수정하기 전에는 트리에서 선택한 디렉터리를 대상 경로로 따라간다.
@@ -23,8 +26,32 @@ export function RemoteUploadPanel({ selectedDir }: RemoteUploadPanelProps) {
     if (!touched && selectedDir) setRemoteDir(selectedDir)
   }, [selectedDir, touched])
 
+  const [measuring, setMeasuring] = useState(false)
+  const [speed, setSpeed] = useState<{ up: number; down: number } | null>(null)
+
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
+  }
+
+  const handleMeasure = async () => {
+    setMeasuring(true); setSpeed(null)
+    try {
+      const r = await api.measureRemote(remoteDir || undefined)
+      setSpeed({ up: r.uploadBps, down: r.downloadBps })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '속도 측정 실패')
+    } finally { setMeasuring(false) }
+  }
+
+  const handleRecommend = async () => {
+    if (localPaths.length === 0) { toast('업로드할 파일을 먼저 선택하세요.'); return }
+    try {
+      const r = await api.getLocalFlat(localPaths)
+      setMaxWorkers(api.recommendWorkers(r.totalFiles, r.totalBytes))
+      toast('파일 수·크기에 맞춰 동시 수를 추천했습니다.', 'info')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '추천 계산 실패')
+    }
   }
 
   const handlePickFiles = async () => {
@@ -125,11 +152,37 @@ export function RemoteUploadPanel({ selectedDir }: RemoteUploadPanelProps) {
           </div>
         </div>
 
+        {/* 링크 속도 측정 (Mac ↔ 원격) */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={handleMeasure}
+            disabled={measuring}
+            className="flex items-center gap-1.5 text-xs text-zinc-300 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            <Gauge size={13} className={measuring ? 'animate-pulse' : ''} />
+            {measuring ? '측정 중...' : '링크 속도 측정'}
+          </button>
+          {speed && (
+            <span className="text-[11px] text-zinc-400">
+              ↑ {formatSpeed(speed.up)} · ↓ {formatSpeed(speed.down)}
+            </span>
+          )}
+        </div>
+
         {/* 동시 업로드 수 */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-zinc-400">동시 업로드 수</label>
-            <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRecommend}
+                disabled={localPaths.length === 0}
+                className="text-[11px] text-blue-400 hover:text-blue-300 disabled:text-zinc-600"
+              >
+                추천
+              </button>
+              <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+            </div>
           </div>
           <input
             type="range"

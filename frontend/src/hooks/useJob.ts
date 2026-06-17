@@ -69,13 +69,35 @@ export function useJob(jobId: string | null) {
     }
 
     ws.onmessage = (e: MessageEvent) => {
-      let evt: WsEvent
+      let raw: Record<string, unknown>
       try {
-        evt = JSON.parse(e.data as string) as WsEvent
+        raw = JSON.parse(e.data as string) as Record<string, unknown>
       } catch {
         return
       }
 
+      // 연결 즉시 1회 오는 스냅샷(Job, type 없음) — 재연결 시 현재 상태 복원
+      if (!raw.type && raw.jobId) {
+        const j = raw as unknown as Job
+        setState(s => ({ ...s, job: j }))
+        if (j.status === 'done') {
+          const elapsed = j.startedAt && j.finishedAt
+            ? (new Date(j.finishedAt).getTime() - new Date(j.startedAt).getTime()) / 1000
+            : 0
+          setState(s => ({
+            ...s,
+            done: { success: j.completedFiles, failure: j.failedFiles, elapsedSec: elapsed },
+            connected: false,
+          }))
+        } else if (j.status === 'error') {
+          setState(s => ({ ...s, error: j.error || '오류', connected: false }))
+        } else if (j.status === 'canceled') {
+          setState(s => ({ ...s, canceled: true, connected: false }))
+        }
+        return
+      }
+
+      const evt = raw as unknown as WsEvent
       switch (evt.type) {
         case 'start':
           setState(s => ({ ...s, job: evt.job }))

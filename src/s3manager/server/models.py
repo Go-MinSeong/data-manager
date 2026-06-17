@@ -225,6 +225,10 @@ class SetDefaultPathRequest(CamelModel):
     path: str | None = None
 
 
+class LocalFlatRequest(CamelModel):
+    paths: list[str] = []
+
+
 class RemoteDownloadRequest(CamelModel):
     remote_dirs: list[str] | None = None
     keys: list[str] | None = None
