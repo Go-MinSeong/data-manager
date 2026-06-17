@@ -50,6 +50,7 @@ from s3manager.server.models import (
     RemoteDownloadRequest,
     RemoteProfile,
     RemoteProfilesResponse,
+    RemoteToRemoteRequest,
     RemoteToS3Request,
     RemoteUploadRequest,
     S3ToRemoteRequest,
@@ -200,6 +201,63 @@ class _RemoteSession:
 
 
 _remote = _RemoteSession()
+# 두 번째 원격 세션 — 원격↔원격 전송의 '대상' 서버용
+_remote_b = _RemoteSession()
+
+
+def _connect_into(session: "_RemoteSession", body: dict) -> JSONResponse:
+    """body(profile/adhoc)로 SSH 연결을 맺어 주어진 세션에 저장한다."""
+    mode = body.get("mode")
+    if mode not in ("profile", "adhoc"):
+        raise HTTPException(status_code=422, detail="mode는 'profile' 또는 'adhoc'이어야 합니다.")
+
+    if mode == "profile":
+        name = body.get("profileName")
+        if not name:
+            raise HTTPException(status_code=422, detail="profile 모드에는 profileName이 필요합니다.")
+        prof = remote_module.load_remote_profile(name)
+        if prof is None:
+            raise HTTPException(status_code=404, detail=f"원격 프로파일을 찾을 수 없습니다: {name}")
+        host, port, username = prof["host"], prof["port"], prof["username"]
+        auth_type, key_path, secret = prof["authType"], prof.get("keyPath"), prof.get("secret")
+        default_path = prof.get("defaultPath")
+        profile_name = name
+    else:
+        host = body.get("host")
+        username = body.get("username")
+        if not host or not username:
+            raise HTTPException(status_code=422, detail="adhoc 모드에는 host와 username이 필요합니다.")
+        port = int(body.get("port") or 22)
+        auth_type = body.get("authType") or "key"
+        key_path = body.get("keyPath")
+        secret = body.get("secret")
+        default_path = None
+        profile_name = None
+
+    key_passphrase = secret if auth_type == "key" else None
+    password = secret if auth_type == "password" else None
+
+    try:
+        ssh = sftp_engine.connect(
+            host=host, port=port, username=username,
+            key_path=key_path, key_passphrase=key_passphrase, password=password,
+        )
+        home = sftp_engine.home_dir(ssh)
+    except Exception as exc:
+        logger.warning("원격 연결 실패: %s", exc)
+        return JSONResponse(status_code=200, content={"ok": False, "error": str(exc)})
+
+    session.connect(
+        ssh, host=host, username=username, home_dir=home,
+        default_path=default_path, profile_name=profile_name,
+    )
+    logger.info("원격 연결 성공: %s@%s (home=%s)", username, host, home)
+    return JSONResponse(
+        content={
+            "ok": True, "host": host, "username": username, "homeDir": home,
+            "defaultPath": default_path, "profileName": profile_name,
+        }
+    )
 
 # ---------------------------------------------------------------------------
 # FastAPI 앱 생성
@@ -587,61 +645,7 @@ async def remote_connect(body: dict) -> JSONResponse:
       - { mode: "profile", profileName }
       - { mode: "adhoc", host, port?, username, authType, keyPath?, secret? }
     """
-    mode = body.get("mode")
-    if mode not in ("profile", "adhoc"):
-        raise HTTPException(status_code=422, detail="mode는 'profile' 또는 'adhoc'이어야 합니다.")
-
-    if mode == "profile":
-        name = body.get("profileName")
-        if not name:
-            raise HTTPException(status_code=422, detail="profile 모드에는 profileName이 필요합니다.")
-        prof = remote_module.load_remote_profile(name)
-        if prof is None:
-            raise HTTPException(status_code=404, detail=f"원격 프로파일을 찾을 수 없습니다: {name}")
-        host, port, username = prof["host"], prof["port"], prof["username"]
-        auth_type, key_path, secret = prof["authType"], prof.get("keyPath"), prof.get("secret")
-        default_path = prof.get("defaultPath")
-        profile_name = name
-    else:
-        host = body.get("host")
-        username = body.get("username")
-        if not host or not username:
-            raise HTTPException(status_code=422, detail="adhoc 모드에는 host와 username이 필요합니다.")
-        port = int(body.get("port") or 22)
-        auth_type = body.get("authType") or "key"
-        key_path = body.get("keyPath")
-        secret = body.get("secret")
-        default_path = None
-        profile_name = None
-
-    key_passphrase = secret if auth_type == "key" else None
-    password = secret if auth_type == "password" else None
-
-    try:
-        ssh = sftp_engine.connect(
-            host=host,
-            port=port,
-            username=username,
-            key_path=key_path,
-            key_passphrase=key_passphrase,
-            password=password,
-        )
-        home = sftp_engine.home_dir(ssh)
-    except Exception as exc:
-        logger.warning("원격 연결 실패: %s", exc)
-        return JSONResponse(status_code=200, content={"ok": False, "error": str(exc)})
-
-    _remote.connect(
-        ssh, host=host, username=username, home_dir=home,
-        default_path=default_path, profile_name=profile_name,
-    )
-    logger.info("원격 연결 성공: %s@%s (home=%s)", username, host, home)
-    return JSONResponse(
-        content={
-            "ok": True, "host": host, "username": username, "homeDir": home,
-            "defaultPath": default_path, "profileName": profile_name,
-        }
-    )
+    return _connect_into(_remote, body)
 
 
 @app.get("/api/remote/connection", response_model=RemoteConnectionStatusResponse)
@@ -820,6 +824,78 @@ async def start_remote_to_s3(body: RemoteToS3Request) -> JobIdResponse:
         max_workers=body.max_workers,
     )
     return JobIdResponse(job_id=job_id)
+
+
+@app.post("/api/transfer/remote-to-remote", response_model=JobIdResponse)
+async def start_remote_to_remote(body: RemoteToRemoteRequest) -> JobIdResponse:
+    """원격(소스) → 원격B(대상) 전송. 두 원격 세션 모두 연결 필요(Mac 경유 릴레이)."""
+    if not body.src_dirs and not body.src_keys:
+        raise HTTPException(status_code=422, detail="srcDirs 또는 srcKeys 중 하나가 필요합니다.")
+    ssh_src = _remote.require_ssh()
+    ssh_dst = _remote_b.require_ssh()
+    job_id = job_manager.submit_remote_to_remote(
+        ssh_src, ssh_dst,
+        src_dirs=body.src_dirs, src_keys=body.src_keys, dest_dir=body.dest_dir,
+        max_workers=body.max_workers,
+    )
+    return JobIdResponse(job_id=job_id)
+
+
+# ---------------------------------------------------------------------------
+# 두 번째 원격(remote-b) — 원격↔원격 전송의 대상 서버
+# ---------------------------------------------------------------------------
+
+@app.post("/api/remote-b/connect")
+async def remote_b_connect(body: dict) -> JSONResponse:
+    """대상 원격(B) 서버에 연결한다(프로파일/adhoc)."""
+    return _connect_into(_remote_b, body)
+
+
+@app.get("/api/remote-b/connection", response_model=RemoteConnectionStatusResponse)
+async def get_remote_b_connection() -> RemoteConnectionStatusResponse:
+    if not _remote_b.connected:
+        return RemoteConnectionStatusResponse(connected=False)
+    return RemoteConnectionStatusResponse(
+        connected=True, host=_remote_b.host, username=_remote_b.username,
+        home_dir=_remote_b.home_dir, default_path=_remote_b.default_path,
+        profile_name=_remote_b.profile_name,
+    )
+
+
+@app.post("/api/remote-b/disconnect", response_model=OkResponse)
+async def remote_b_disconnect() -> OkResponse:
+    _remote_b.disconnect()
+    return OkResponse(ok=True)
+
+
+@app.get("/api/remote-b/objects", response_model=ObjectsResponse)
+async def list_remote_b_objects(path: str = "") -> ObjectsResponse:
+    ssh = _remote_b.require_ssh()
+    try:
+        result = sftp_engine.list_one_level(ssh, path)
+    except Exception as exc:
+        transport = ssh.get_transport()
+        if transport is None or not transport.is_active():
+            _remote_b.disconnect()
+            raise HTTPException(status_code=409, detail="대상 원격 연결이 끊겼습니다. 다시 연결하세요.")
+        raise HTTPException(status_code=400, detail=f"경로를 열 수 없습니다: {exc}")
+    folders = [S3Folder(**f) for f in result["folders"]]
+    objects = [
+        S3Object(key=o["key"], size=o["size"], last_modified=o["lastModified"])
+        for o in result["objects"]
+    ]
+    resolved = path or (_remote_b.home_dir or "")
+    return ObjectsResponse(prefix=resolved, folders=folders, objects=objects)
+
+
+@app.get("/api/remote-b/diskspace", response_model=DiskSpaceResponse)
+async def remote_b_diskspace(path: str = "") -> DiskSpaceResponse:
+    ssh = _remote_b.require_ssh()
+    try:
+        info = sftp_engine.disk_space(ssh, path or (_remote_b.home_dir or "."))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"여유 공간 조회 실패: {exc}")
+    return DiskSpaceResponse(total=info["total"], free=info["free"], used=info["used"])
 
 
 # ---------------------------------------------------------------------------

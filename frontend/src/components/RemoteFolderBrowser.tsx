@@ -8,19 +8,25 @@ interface RemoteFolderBrowserProps {
   onChange: (path: string) => void
   /** 높이 클래스(기본 h-56) */
   heightClass?: string
+  /** 디렉터리 목록 조회 함수(기본: 기본 원격). 두 번째 원격(remote-b)에선 교체 */
+  fetcher?: (path?: string) => Promise<{
+    prefix: string
+    folders: { key: string; name: string }[]
+  }>
 }
 
 /** 원격 디렉터리 폴더 브라우저 — breadcrumb + 하위 폴더 클릭으로 이동/선택. */
-export function RemoteFolderBrowser({ value, onChange, heightClass = 'h-56' }: RemoteFolderBrowserProps) {
+export function RemoteFolderBrowser({ value, onChange, heightClass = 'h-56', fetcher }: RemoteFolderBrowserProps) {
   const [folders, setFolders] = useState<{ key: string; name: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const load = fetcher ?? api.getRemoteObjects
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setErr(null)
-    api.getRemoteObjects(value || undefined)
+    load(value || undefined)
       .then(res => {
         if (cancelled) return
         setFolders(res.folders.map(f => ({ key: f.key.replace(/\/$/, ''), name: f.name })))

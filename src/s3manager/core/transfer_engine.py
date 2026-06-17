@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import posixpath
+import queue as queue_mod
 import shlex
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -259,6 +260,107 @@ def s3_to_remote(
         use_direct=use_direct, max_workers=max_workers,
         on_file=on_file, cancel_event=cancel_event,
     )
+
+
+def _relay_remote_copy(s_sftp, d_sftp, src_path, dst_path, on_bytes, cancel_event):
+    """원격A 파일을 읽어 원격B에 스트리밍 기록(Mac 경유, 디스크 미사용)."""
+    parent = posixpath.dirname(dst_path)
+    if parent:
+        sftp_engine._sftp_makedirs(d_sftp, parent)
+    with s_sftp.open(src_path, "rb") as rf:
+        rf.prefetch()
+        with d_sftp.open(dst_path, "wb") as wf:
+            wf.set_pipelined(True)
+            while True:
+                if cancel_event and cancel_event.is_set():
+                    raise TransferCanceled()
+                chunk = rf.read(CHUNK)
+                if not chunk:
+                    break
+                wf.write(chunk)
+                if on_bytes:
+                    on_bytes(len(chunk))
+
+
+def remote_to_remote(
+    ssh_src,
+    ssh_dst,
+    *,
+    src_dirs: list[str] | None = None,
+    src_keys: list[str] | None = None,
+    dest_dir: str,
+    max_workers: int = 4,
+    on_bytes: BytesCallback | None = None,
+    on_file: FileCallback | None = None,
+    cancel_event: threading.Event | None = None,
+) -> tuple[int, int]:
+    """원격A의 여러 폴더/파일을 원격B 디렉터리로 복사한다(Mac 경유 릴레이).
+
+    서버끼리 직접 연결하지 않으며, 각 워커가 (소스, 대상) SFTP 채널쌍을 재사용한다.
+    """
+    targets = _enumerate_remote(ssh_src, src_dirs, src_keys)
+    if not targets:
+        return 0, 0
+    base = dest_dir.rstrip("/")
+    logger.info("원격→원격: %d개 (Mac 경유 릴레이)", len(targets))
+
+    def _dst(rel: str) -> str:
+        return f"{base}/{rel}" if base else rel
+
+    # 워커별 (src, dst) 채널쌍 확보
+    n = max(1, min(max_workers, len(targets)))
+    pairs: list[tuple] = []
+    for _ in range(n):
+        try:
+            s = sftp_engine._open_sftp_retry(ssh_src)
+            d = sftp_engine._open_sftp_retry(ssh_dst)
+            pairs.append((s, d))
+        except Exception as exc:
+            logger.warning("채널쌍 확보 실패(%d/%d): %s", len(pairs), n, exc)
+            break
+    if not pairs:
+        pairs.append((sftp_engine._open_sftp_retry(ssh_src), sftp_engine._open_sftp_retry(ssh_dst)))
+
+    work_q: queue_mod.Queue = queue_mod.Queue()
+    for t in targets:
+        work_q.put(t)
+    counts = {"success": 0, "failure": 0}
+    lock = threading.Lock()
+
+    def worker(s_sftp, d_sftp):
+        while True:
+            if cancel_event and cancel_event.is_set():
+                return
+            try:
+                src_path, rel, _ = work_q.get_nowait()
+            except queue_mod.Empty:
+                return
+            try:
+                _relay_remote_copy(s_sftp, d_sftp, src_path, _dst(rel), on_bytes, cancel_event)
+                ok, err = True, None
+            except TransferCanceled:
+                return
+            except Exception as exc:
+                logger.error("원격→원격 전송 실패(%s): %s", src_path, exc)
+                ok, err = False, str(exc)
+            with lock:
+                counts["success" if ok else "failure"] += 1
+            if on_file:
+                on_file(src_path, ok, err)
+
+    threads = [threading.Thread(target=worker, args=(s, d), daemon=True) for s, d in pairs]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for s, d in pairs:
+        for ch in (s, d):
+            try:
+                ch.close()
+            except Exception:
+                pass
+
+    return counts["success"], counts["failure"]
 
 
 def remote_to_s3(

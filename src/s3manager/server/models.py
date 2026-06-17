@@ -258,6 +258,15 @@ class RemoteToS3Request(CamelModel):
     max_workers: int = 4
 
 
+class RemoteToRemoteRequest(CamelModel):
+    """원격(소스) → 원격B(대상) 전송. Mac 경유 릴레이."""
+
+    src_dirs: list[str] | None = None
+    src_keys: list[str] | None = None
+    dest_dir: str
+    max_workers: int = 4
+
+
 # ---------------------------------------------------------------------------
 # 로컬 / 시스템
 # ---------------------------------------------------------------------------
