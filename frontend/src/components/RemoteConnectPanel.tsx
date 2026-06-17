@@ -45,10 +45,23 @@ export function RemoteConnectPanel() {
     void loadProfiles()
   }, [])
 
-  const applyConnection = (res: { host: string; username: string; homeDir: string }) => {
+  const applyConnection = (res: {
+    host: string
+    username: string
+    homeDir: string
+    defaultPath?: string | null
+    profileName?: string | null
+  }) => {
     dispatch({
       type: 'SET_REMOTE_CONNECTION',
-      payload: { connected: true, host: res.host, username: res.username, homeDir: res.homeDir },
+      payload: {
+        connected: true,
+        host: res.host,
+        username: res.username,
+        homeDir: res.homeDir,
+        defaultPath: res.defaultPath ?? null,
+        profileName: res.profileName ?? null,
+      },
     })
     toast(`${res.username}@${res.host}에 연결되었습니다.`, 'success')
   }

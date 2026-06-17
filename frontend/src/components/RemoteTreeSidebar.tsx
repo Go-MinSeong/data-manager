@@ -12,6 +12,8 @@ import {
   X,
   ArrowUp,
   CornerDownLeft,
+  Star,
+  ChevronRight as Chevron,
 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
@@ -126,13 +128,32 @@ export function RemoteTreeSidebar({
 
   useEffect(() => {
     if (connected) {
-      void loadRoot()
+      // 프로파일에 저장된 기본 폴더가 있으면 거기서, 없으면 홈에서 시작
+      void loadRoot(state.remoteConnection.defaultPath || undefined)
     } else {
       setRootPath('')
       setChildren(new Map())
       setExpanded(new Set())
     }
-  }, [connected])
+  }, [connected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveDefaultFolder = async () => {
+    const name = state.remoteConnection.profileName
+    if (!name) {
+      toast('프로파일로 연결한 경우에만 기본 폴더를 저장할 수 있습니다.', 'info')
+      return
+    }
+    try {
+      await api.setRemoteDefaultPath(name, rootPath)
+      dispatch({
+        type: 'SET_REMOTE_CONNECTION',
+        payload: { ...state.remoteConnection, defaultPath: rootPath },
+      })
+      toast(`기본 폴더로 저장했습니다: ${rootPath}`, 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '기본 폴더 저장 실패')
+    }
+  }
 
   const toggleFolder = async (folderKey: string) => {
     const dirPath = folderKey.replace(/\/$/, '') // 트레일링 슬래시 제거 = 디렉터리 경로
@@ -244,6 +265,20 @@ export function RemoteTreeSidebar({
           <span className="text-xs font-medium text-zinc-400">원격 경로</span>
           {connected && (
             <div className="flex items-center gap-0.5">
+              {state.remoteConnection.profileName && (
+                <button
+                  onClick={saveDefaultFolder}
+                  disabled={rootLoading}
+                  title="이 폴더를 프로파일 기본 폴더로 저장"
+                  className={`p-1 rounded hover:bg-zinc-800 transition-colors ${
+                    state.remoteConnection.defaultPath === rootPath
+                      ? 'text-yellow-400'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  <Star size={12} />
+                </button>
+              )}
               <button
                 onClick={() => {
                   const parent =
@@ -269,6 +304,26 @@ export function RemoteTreeSidebar({
             </div>
           )}
         </div>
+        {/* breadcrumb */}
+        {connected && rootPath && (
+          <div className="flex items-center gap-0.5 px-1 overflow-x-auto whitespace-nowrap text-[11px]">
+            <button onClick={() => void loadRoot('/')} className="px-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200">/</button>
+            {rootPath.split('/').filter(Boolean).map((seg, i, arr) => {
+              const path = '/' + arr.slice(0, i + 1).join('/')
+              return (
+                <span key={path} className="flex items-center gap-0.5">
+                  <Chevron size={9} className="text-zinc-600" />
+                  <button
+                    onClick={() => void loadRoot(path)}
+                    className={`px-1 rounded hover:bg-zinc-800 ${i === arr.length - 1 ? 'text-zinc-200' : 'text-zinc-400'}`}
+                  >
+                    {seg}
+                  </button>
+                </span>
+              )
+            })}
+          </div>
+        )}
         {connected && (
           <div className="relative">
             <input

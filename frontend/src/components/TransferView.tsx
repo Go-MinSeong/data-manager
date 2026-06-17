@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { ArrowRight, ArrowLeftRight, Cloud, Server, Send } from 'lucide-react'
+import { ArrowRight, ArrowLeftRight, Cloud, Server, Send, HardDrive, Gauge } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
 import { useJob } from '../hooks/useJob'
 import { JobProgress } from './JobProgress'
 import { TreeSidebar } from './TreeSidebar'
 import { RemoteTreeSidebar } from './RemoteTreeSidebar'
+import { RemoteFolderBrowser } from './RemoteFolderBrowser'
+import { formatBytes, formatSpeed } from './ProgressBar'
 
 type Direction = 's3-to-remote' | 'remote-to-s3'
 
@@ -25,6 +27,10 @@ export function TransferView() {
   const [jobId, setJobId] = useState<string | null>(null)
   const { state: jobState, close: closeJob } = useJob(jobId)
 
+  const [freeSpace, setFreeSpace] = useState<number | null>(null)
+  const [measuring, setMeasuring] = useState(false)
+  const [speed, setSpeed] = useState<{ up: number; down: number } | null>(null)
+
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
   }
@@ -38,6 +44,32 @@ export function TransferView() {
     if (selectedRemoteDir) setRemoteDir(selectedRemoteDir)
     else if (state.remoteConnection.homeDir) setRemoteDir(state.remoteConnection.homeDir)
   }, [selectedRemoteDir, state.remoteConnection.homeDir, remoteTouched])
+
+  // 목적지가 원격일 때 여유 공간 조회
+  useEffect(() => {
+    if (!remoteConnected || direction !== 's3-to-remote' || !remoteDir) {
+      setFreeSpace(null)
+      return
+    }
+    let cancelled = false
+    api.getRemoteDiskSpace(remoteDir)
+      .then(r => { if (!cancelled) setFreeSpace(r.free) })
+      .catch(() => { if (!cancelled) setFreeSpace(null) })
+    return () => { cancelled = true }
+  }, [direction, remoteDir, remoteConnected])
+
+  const handleMeasure = async () => {
+    setMeasuring(true)
+    setSpeed(null)
+    try {
+      const r = await api.measureRemote(direction === 's3-to-remote' ? remoteDir : undefined)
+      setSpeed({ up: r.uploadBps, down: r.downloadBps })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '속도 측정 실패')
+    } finally {
+      setMeasuring(false)
+    }
+  }
 
   const isRunning = jobId && !jobState.done && !jobState.error && !jobState.canceled
 
@@ -196,13 +228,16 @@ export function TransferView() {
           {/* 목적지 */}
           {srcIsS3 ? (
             <div>
-              <label className="text-xs text-zinc-400 mb-1 block">대상 원격 경로</label>
-              <input
+              <label className="text-xs text-zinc-400 mb-1 block">대상 원격 경로 (폴더 선택)</label>
+              <RemoteFolderBrowser
                 value={remoteDir}
-                onChange={e => { setRemoteDir(e.target.value); setRemoteTouched(true) }}
-                placeholder="/home/user/incoming"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
+                onChange={p => { setRemoteDir(p); setRemoteTouched(true) }}
               />
+              <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-zinc-500">
+                <HardDrive size={11} />
+                여유 공간:{' '}
+                {freeSpace == null ? '—' : <span className="text-zinc-300">{formatBytes(freeSpace)}</span>}
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -224,8 +259,29 @@ export function TransferView() {
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
+              <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                <HardDrive size={11} /> S3 — 용량 제한 없음
+              </p>
             </div>
           )}
+
+          {/* 링크 속도 측정 (Mac ↔ 원격) */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleMeasure}
+              disabled={measuring}
+              className="flex items-center gap-1.5 text-xs text-zinc-300 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors"
+            >
+              <Gauge size={13} className={measuring ? 'animate-pulse' : ''} />
+              {measuring ? '측정 중...' : '링크 속도 측정'}
+            </button>
+            {speed && (
+              <span className="text-[11px] text-zinc-400">
+                ↑ {formatSpeed(speed.up)} · ↓ {formatSpeed(speed.down)}{' '}
+                <span className="text-zinc-600">(Mac↔원격)</span>
+              </span>
+            )}
+          </div>
 
           {/* 동시 전송 수 */}
           <div>

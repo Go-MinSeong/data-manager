@@ -10,9 +10,13 @@ interface JobProgressProps {
 }
 
 export function JobProgress({ jobId, jobState, onDismiss }: JobProgressProps) {
-  const { progress, done, error, canceled } = jobState
+  const { progress, done, error, canceled, job } = jobState
 
   if (!jobId) return null
+
+  // 완료 후 평균 속도 (직통 전송 등 실시간 속도가 없는 경우의 지표)
+  const doneBytes = progress?.transferredBytes ?? job?.transferredBytes ?? 0
+  const avgBps = done && done.elapsedSec > 0 ? doneBytes / done.elapsedSec : 0
 
   const handleCancel = async () => {
     if (!jobId) return
@@ -34,6 +38,7 @@ export function JobProgress({ jobId, jobState, onDismiss }: JobProgressProps) {
               <p className="text-sm font-medium text-zinc-200">전송 완료</p>
               <p className="text-xs text-zinc-400 mt-0.5">
                 성공 {done.success}건 / 실패 {done.failure}건 · {done.elapsedSec.toFixed(1)}초
+                {avgBps > 0 && <> · 평균 {formatSpeed(avgBps)}</>}
               </p>
             </div>
           </div>
