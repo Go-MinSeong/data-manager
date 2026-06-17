@@ -278,6 +278,50 @@ export const startRemoteToS3 = (body: {
   maxWorkers?: number
 }) => request<{ jobId: string }>('POST', '/transfer/remote-to-s3', body)
 
+export const startRemoteToRemote = (body: {
+  srcDirs?: string[]
+  srcKeys?: string[]
+  destDir: string
+  maxWorkers?: number
+}) => request<{ jobId: string }>('POST', '/transfer/remote-to-remote', body)
+
+// ── 두 번째 원격(remote-b) — 원격↔원격 대상 ────────────────────────────────────
+
+export const remoteBConnect = (
+  body:
+    | { mode: 'profile'; profileName: string }
+    | {
+        mode: 'adhoc'; host: string; port?: number; username: string
+        authType: 'key' | 'password'; keyPath?: string | null; secret?: string
+      },
+) =>
+  request<
+    | { ok: true; host: string; username: string; homeDir: string }
+    | { ok: false; error: string }
+  >('POST', '/remote-b/connect', body)
+
+export const getRemoteBConnection = () =>
+  request<{ connected: boolean; host?: string; username?: string; homeDir?: string }>(
+    'GET',
+    '/remote-b/connection',
+  )
+
+export const remoteBDisconnect = () => request<{ ok: true }>('POST', '/remote-b/disconnect')
+
+export const getRemoteBObjects = (path?: string) => {
+  const qs = path ? `?path=${encodeURIComponent(path)}` : ''
+  return request<{
+    prefix: string
+    folders: import('../types').S3Folder[]
+    objects: import('../types').S3Object[]
+  }>('GET', `/remote-b/objects${qs}`)
+}
+
+export const getRemoteBDiskSpace = (path?: string) => {
+  const qs = path ? `?path=${encodeURIComponent(path)}` : ''
+  return request<{ total: number; free: number; used: number }>('GET', `/remote-b/diskspace${qs}`)
+}
+
 // ── 잡 ────────────────────────────────────────────────────────────────────────
 
 export const getJobs = () => request<{ jobs: Job[] }>('GET', '/jobs')

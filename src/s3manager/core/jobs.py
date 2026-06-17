@@ -552,6 +552,39 @@ class JobManager:
         self._executor.submit(self._run_job, job, task)
         return job.job_id
 
+    def submit_remote_to_remote(
+        self,
+        ssh_src,
+        ssh_dst,
+        *,
+        src_dirs: list[str] | None = None,
+        src_keys: list[str] | None = None,
+        dest_dir: str,
+        max_workers: int = 4,
+    ) -> str:
+        """원격 → 원격 전송 잡을 생성한다(Mac 경유 릴레이)."""
+        job = self._new_job("remote-to-remote")
+        try:
+            targets = transfer_engine._enumerate_remote(ssh_src, src_dirs, src_keys)
+            s = transfer_engine.summarize(targets)
+            job.total_files = s["totalFiles"]
+            job.total_bytes = s["totalBytes"]
+        except Exception:
+            pass
+
+        on_bytes, on_file = self._make_callbacks(job)
+
+        def task():
+            return transfer_engine.remote_to_remote(
+                ssh_src, ssh_dst,
+                src_dirs=src_dirs, src_keys=src_keys, dest_dir=dest_dir,
+                max_workers=max_workers, on_bytes=on_bytes, on_file=on_file,
+                cancel_event=job._cancel_event,
+            )
+
+        self._executor.submit(self._run_job, job, task)
+        return job.job_id
+
 
 # 모듈 수준 싱글톤
 job_manager = JobManager()
