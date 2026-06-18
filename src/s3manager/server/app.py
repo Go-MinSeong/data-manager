@@ -46,6 +46,8 @@ from s3manager.server.models import (
     ProfilesResponse,
     DiskSpaceResponse,
     MeasureResponse,
+    ProfileHealth,
+    ProfileHealthResponse,
     RemoteConnectionStatusResponse,
     RemoteDownloadRequest,
     RemoteProfile,
@@ -399,7 +401,7 @@ async def delete_credentials(name: str) -> OkResponse:
 
 
 @app.post("/api/connect")
-async def connect(body: dict) -> JSONResponse:
+def connect(body: dict) -> JSONResponse:
     """자격증명 검증 후 활성 세션을 서버 메모리에 저장한다.
 
     body:
@@ -471,7 +473,7 @@ async def disconnect() -> OkResponse:
 # ---------------------------------------------------------------------------
 
 @app.get("/api/buckets", response_model=BucketsResponse)
-async def list_buckets() -> BucketsResponse:
+def list_buckets() -> BucketsResponse:
     """버킷 목록을 반환한다."""
     client = _session.require_client()
     try:
@@ -494,7 +496,7 @@ async def list_buckets() -> BucketsResponse:
 
 
 @app.get("/api/objects/flat", response_model=FlatSummaryResponse)
-async def objects_flat(bucket: str, prefix: str = "") -> FlatSummaryResponse:
+def objects_flat(bucket: str, prefix: str = "") -> FlatSummaryResponse:
     """prefix 하위 전체 파일 수와 총 바이트를 반환한다."""
     client = _session.require_client()
     try:
@@ -508,7 +510,7 @@ async def objects_flat(bucket: str, prefix: str = "") -> FlatSummaryResponse:
 
 
 @app.get("/api/objects", response_model=ObjectsResponse)
-async def list_objects(bucket: str, prefix: str = "") -> ObjectsResponse:
+def list_objects(bucket: str, prefix: str = "") -> ObjectsResponse:
     """delimiter='/'로 한 레벨만 열거한다."""
     client = _session.require_client()
     try:
@@ -616,6 +618,16 @@ async def get_remote_profiles() -> RemoteProfilesResponse:
     return RemoteProfilesResponse(profiles=profiles)
 
 
+@app.get("/api/remote/profiles/health", response_model=ProfileHealthResponse)
+def remote_profiles_health() -> ProfileHealthResponse:
+    """저장된 프로파일들의 도달성을 TCP 연결로 동시 점검한다(인증 미수행)."""
+    results = [
+        ProfileHealth(name=r["name"], reachable=r["reachable"], latency_ms=r["latencyMs"])
+        for r in remote_module.check_all_reachable()
+    ]
+    return ProfileHealthResponse(results=results)
+
+
 @app.post("/api/remote/profiles", response_model=OkResponse)
 async def save_remote_profile(body: SaveRemoteProfileRequest) -> OkResponse:
     """원격 프로파일을 저장한다(비밀은 Keychain)."""
@@ -639,7 +651,7 @@ async def delete_remote_profile(name: str) -> OkResponse:
 
 
 @app.post("/api/remote/connect")
-async def remote_connect(body: dict) -> JSONResponse:
+def remote_connect(body: dict) -> JSONResponse:
     """원격 서버에 SSH 연결을 맺고 활성 세션에 저장한다.
 
     body:
@@ -677,7 +689,7 @@ async def set_remote_default_path(name: str, body: SetDefaultPathRequest) -> OkR
 
 
 @app.get("/api/remote/flat", response_model=FlatSummaryResponse)
-async def remote_flat(path: str = "") -> FlatSummaryResponse:
+def remote_flat(path: str = "") -> FlatSummaryResponse:
     """원격 path 하위 전체 파일 수·총 바이트(추천/여유공간 비교용)."""
     ssh = _remote.require_ssh()
     try:
@@ -688,7 +700,7 @@ async def remote_flat(path: str = "") -> FlatSummaryResponse:
 
 
 @app.get("/api/remote/diskspace", response_model=DiskSpaceResponse)
-async def remote_diskspace(path: str = "") -> DiskSpaceResponse:
+def remote_diskspace(path: str = "") -> DiskSpaceResponse:
     """원격 path가 속한 파일시스템의 여유 공간(byte)."""
     ssh = _remote.require_ssh()
     try:
@@ -699,7 +711,7 @@ async def remote_diskspace(path: str = "") -> DiskSpaceResponse:
 
 
 @app.post("/api/remote/measure", response_model=MeasureResponse)
-async def remote_measure(body: SetDefaultPathRequest) -> MeasureResponse:
+def remote_measure(body: SetDefaultPathRequest) -> MeasureResponse:
     """Mac↔원격 전송 속도를 임시 프로브로 측정한다(body.path 위치 사용)."""
     ssh = _remote.require_ssh()
     try:
@@ -712,7 +724,7 @@ async def remote_measure(body: SetDefaultPathRequest) -> MeasureResponse:
 
 
 @app.post("/api/local/flat", response_model=FlatSummaryResponse)
-async def local_flat(body: LocalFlatRequest) -> FlatSummaryResponse:
+def local_flat(body: LocalFlatRequest) -> FlatSummaryResponse:
     """로컬 파일/폴더 목록의 전체 파일 수·총 바이트(업로드 추천용)."""
     import os
     total_files = 0
@@ -764,7 +776,7 @@ async def remote_disconnect() -> OkResponse:
 
 
 @app.get("/api/remote/objects", response_model=ObjectsResponse)
-async def list_remote_objects(path: str = "") -> ObjectsResponse:
+def list_remote_objects(path: str = "") -> ObjectsResponse:
     """원격 디렉터리의 한 레벨을 열거한다. path가 비면 홈 디렉터리."""
     ssh = _remote.require_ssh()
     try:
@@ -873,7 +885,7 @@ async def start_remote_to_remote(body: RemoteToRemoteRequest) -> JobIdResponse:
 # ---------------------------------------------------------------------------
 
 @app.post("/api/remote-b/connect")
-async def remote_b_connect(body: dict) -> JSONResponse:
+def remote_b_connect(body: dict) -> JSONResponse:
     """대상 원격(B) 서버에 연결한다(프로파일/adhoc)."""
     return _connect_into(_remote_b, body)
 
@@ -896,7 +908,7 @@ async def remote_b_disconnect() -> OkResponse:
 
 
 @app.get("/api/remote-b/objects", response_model=ObjectsResponse)
-async def list_remote_b_objects(path: str = "") -> ObjectsResponse:
+def list_remote_b_objects(path: str = "") -> ObjectsResponse:
     ssh = _remote_b.require_ssh()
     try:
         result = sftp_engine.list_one_level(ssh, path)
@@ -916,7 +928,7 @@ async def list_remote_b_objects(path: str = "") -> ObjectsResponse:
 
 
 @app.get("/api/remote-b/diskspace", response_model=DiskSpaceResponse)
-async def remote_b_diskspace(path: str = "") -> DiskSpaceResponse:
+def remote_b_diskspace(path: str = "") -> DiskSpaceResponse:
     ssh = _remote_b.require_ssh()
     try:
         info = sftp_engine.disk_space(ssh, path or (_remote_b.home_dir or "."))

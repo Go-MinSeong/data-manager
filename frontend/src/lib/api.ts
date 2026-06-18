@@ -161,6 +161,15 @@ export const startUpload = (body: {
 export const getRemoteProfiles = () =>
   request<{ profiles: RemoteProfile[] }>('GET', '/remote/profiles')
 
+export interface ProfileHealth {
+  name: string
+  reachable: boolean
+  latencyMs: number | null
+}
+
+export const getProfileHealth = () =>
+  request<{ results: ProfileHealth[] }>('GET', '/remote/profiles/health')
+
 export const saveRemoteProfile = (data: {
   name: string
   host: string

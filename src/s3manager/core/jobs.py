@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from s3manager import settings
+from s3manager.core import notify as notify_module
 from s3manager.core import s3_engine
 from s3manager.core import sftp_engine
 from s3manager.core import transfer_engine
@@ -31,6 +32,21 @@ PROGRESS_THROTTLE_SEC = 0.2
 
 # 이력 최대 보관 수
 MAX_JOB_HISTORY = 100
+
+# 완료 알림 최소 소요 시간(초) — 이보다 짧은 성공 잡은 알림 생략(실패는 항상 알림)
+NOTIFY_MIN_SEC = 3.0
+
+# 잡 종류 → 사람이 읽는 라벨(알림용)
+JOB_KIND_LABELS = {
+    "download": "다운로드",
+    "upload": "업로드",
+    "remote-download": "원격 다운로드",
+    "remote-upload": "원격 업로드",
+    "s3-to-remote": "S3→원격 전송",
+    "remote-to-s3": "원격→S3 전송",
+    "remote-to-remote": "원격→원격 전송",
+    "sync": "동기화",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +79,8 @@ class JobState:
     _last_progress_ts: float = field(default=0.0, repr=False)
     # 전송 시작 시각(속도 계산용)
     _transfer_start: float = field(default=0.0, repr=False)
+    # 카운터(transferred_bytes/completed_files/failed_files) 동시 갱신 보호
+    _counter_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Job 모델에 맞는 딕셔너리(camelCase)를 반환한다."""
@@ -116,6 +134,7 @@ class JobManager:
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="job-worker")
         self._jobs: dict[str, JobState] = {}  # jobId → JobState
         self._lock = threading.Lock()
+        self._persist_lock = threading.Lock()  # jobs.json 쓰기 직렬화
         self._loop: asyncio.AbstractEventLoop | None = None
         self._history_path = settings.APP_SUPPORT_DIR / "jobs.json"
         self._load_persisted()
@@ -149,10 +168,13 @@ class JobManager:
                 reverse=True,
             )
             data = [j.to_dict() for j in terminal[:MAX_JOB_HISTORY]]
+            payload = json.dumps(data, ensure_ascii=False)
             self._history_path.parent.mkdir(parents=True, exist_ok=True)
-            self._history_path.write_text(
-                json.dumps(data, ensure_ascii=False), encoding="utf-8"
-            )
+            # 쓰기 직렬화 + 임시파일→os.replace로 원자적 교체(부분 쓰기 방지)
+            with self._persist_lock:
+                tmp = self._history_path.with_name(self._history_path.name + ".tmp")
+                tmp.write_text(payload, encoding="utf-8")
+                os.replace(tmp, self._history_path)
         except Exception as exc:
             logger.debug("잡 이력 저장 실패: %s", exc)
 
@@ -241,7 +263,8 @@ class JobManager:
         """잡에 연결된 on_bytes / on_file 콜백을 반환한다."""
 
         def on_bytes(n: int) -> None:
-            job.transferred_bytes += n
+            with job._counter_lock:
+                job.transferred_bytes += n
             now = time.monotonic()
             if now - job._last_progress_ts < PROGRESS_THROTTLE_SEC:
                 return
@@ -267,10 +290,11 @@ class JobManager:
             )
 
         def on_file(key: str, success: bool, error_msg: str | None) -> None:
-            if success:
-                job.completed_files += 1
-            else:
-                job.failed_files += 1
+            with job._counter_lock:
+                if success:
+                    job.completed_files += 1
+                else:
+                    job.failed_files += 1
             job.current_file = key
             self._push_event(
                 job,
@@ -304,6 +328,7 @@ class JobManager:
             job.finished_at = datetime.now(tz=timezone.utc)
             self._push_event(job, {"type": "error", "message": str(exc)})
             self._persist()
+            self._notify_terminal(job, 0.0)
             return
 
         job.finished_at = datetime.now(tz=timezone.utc)
@@ -312,6 +337,11 @@ class JobManager:
         if job._cancel_event.is_set():
             job.status = "canceled"
             self._push_event(job, {"type": "canceled"})
+        elif failure > 0 and success == 0:
+            # 전 파일 실패는 성공이 아니라 오류로 표시한다.
+            job.status = "error"
+            job.error = f"전체 {failure}개 파일 전송 실패"
+            self._push_event(job, {"type": "error", "message": job.error})
         else:
             job.status = "done"
             self._push_event(
@@ -324,6 +354,24 @@ class JobManager:
                 },
             )
         self._persist()
+        self._notify_terminal(job, elapsed)
+
+    def _notify_terminal(self, job: JobState, elapsed: float) -> None:
+        """잡 종료 시 macOS 알림(best-effort). 취소는 알리지 않고,
+        짧은 성공 잡은 생략하되 실패는 항상 알린다."""
+        if job.status == "canceled":
+            return
+        ok = job.status == "done"
+        if ok and elapsed < NOTIFY_MIN_SEC:
+            return
+        label = JOB_KIND_LABELS.get(job.kind, job.kind)
+        if ok:
+            title = f"{label} 완료"
+            message = f"{job.completed_files}개 파일 · {round(elapsed)}초"
+        else:
+            title = f"{label} 실패"
+            message = job.error or f"{job.failed_files}개 파일 실패"
+        notify_module.notify(title, message, subtitle=settings.APP_NAME)
 
     # ------------------------------------------------------------------
     # 공개 잡 생성 메서드

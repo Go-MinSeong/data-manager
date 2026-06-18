@@ -185,6 +185,18 @@ class RemoteProfilesResponse(CamelModel):
     profiles: list[RemoteProfile]
 
 
+class ProfileHealth(CamelModel):
+    """프로파일 도달성 점검 결과(TCP 연결 기준)."""
+
+    name: str
+    reachable: bool
+    latency_ms: int | None = None
+
+
+class ProfileHealthResponse(CamelModel):
+    results: list[ProfileHealth]
+
+
 class SaveRemoteProfileRequest(CamelModel):
     """원격 프로파일 저장 요청.
 
