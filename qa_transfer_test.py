@@ -109,7 +109,9 @@ def main():
 
             def exec_command(self, cmd, timeout=None):
                 self.cmds.append(cmd)
-                chan = types.SimpleNamespace(recv_exit_status=lambda: 0)
+                chan = types.SimpleNamespace(
+                    recv_exit_status=lambda: 0, exit_status_ready=lambda: True
+                )
                 stdout = types.SimpleNamespace(channel=chan, read=lambda: b"")
                 stderr = types.SimpleNamespace(read=lambda: b"")
                 return None, stdout, stderr

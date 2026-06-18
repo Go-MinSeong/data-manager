@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import keyring
@@ -120,6 +123,47 @@ def delete_remote_profile(name: str) -> None:
     except keyring.errors.PasswordDeleteError:
         pass
     logger.info("원격 프로파일 삭제 완료: %s", name)
+
+
+# ---------------------------------------------------------------------------
+# 도달성 헬스체크 — TCP 연결만 시도(SSH 인증 미수행, 빠른 사전 표시용)
+# ---------------------------------------------------------------------------
+
+def _probe(host: str, port: int, timeout: float) -> tuple[bool, int | None]:
+    """host:port에 TCP 연결을 시도해 (도달가능, 지연ms)를 반환한다.
+
+    서버가 떠 있고 IP 허용목록을 통과하며 포트가 열려 있는지만 확인한다.
+    인증은 수행하지 않으므로 비밀이 필요 없고 빠르다.
+    """
+    if not host:
+        return False, None
+    start = time.monotonic()
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True, int((time.monotonic() - start) * 1000)
+    except Exception:
+        return False, None
+
+
+def check_all_reachable(timeout: float = 4.0) -> list[dict[str, Any]]:
+    """모든 프로파일의 도달성을 동시에 점검한다."""
+    profiles = list_remote_profiles()
+    if not profiles:
+        return []
+    results: list[dict[str, Any] | None] = [None] * len(profiles)
+    with ThreadPoolExecutor(max_workers=min(8, len(profiles))) as ex:
+        futs = {
+            ex.submit(_probe, p["host"], p["port"], timeout): i
+            for i, p in enumerate(profiles)
+        }
+        for fut, i in futs.items():
+            reachable, ms = fut.result()
+            results[i] = {
+                "name": profiles[i]["name"],
+                "reachable": reachable,
+                "latencyMs": ms,
+            }
+    return [r for r in results if r is not None]
 
 
 def load_remote_profile(name: str) -> dict[str, Any] | None:

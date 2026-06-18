@@ -35,6 +35,10 @@ export type AppAction =
   | { type: 'REMOVE_TOAST'; payload: string }
   | { type: 'SET_ACTIVE_JOB'; payload: { key: string; id: string | null } }
 
+// 토스트 고유 id 카운터 — 같은 ms에 두 토스트가 떠도 key가 충돌하지 않도록
+// 호출부의 id(대개 Date.now())를 신뢰하지 않고 reducer가 단조 증가 id를 부여한다.
+let _toastSeq = 0
+
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_MODE':
@@ -48,8 +52,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, activeTab: action.payload }
     case 'SET_BUCKET':
       return { ...state, selectedBucket: action.payload }
-    case 'ADD_TOAST':
-      return { ...state, toasts: [...state.toasts, action.payload] }
+    case 'ADD_TOAST': {
+      const id = `t${++_toastSeq}`
+      return { ...state, toasts: [...state.toasts, { ...action.payload, id }] }
+    }
     case 'REMOVE_TOAST':
       return { ...state, toasts: state.toasts.filter(t => t.id !== action.payload) }
     case 'SET_ACTIVE_JOB':

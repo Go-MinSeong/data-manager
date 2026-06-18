@@ -15,6 +15,7 @@ import posixpath
 import queue as queue_mod
 import shlex
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
@@ -89,25 +90,39 @@ def remote_can_reach_s3(ssh: paramiko.SSHClient, region: str | None) -> bool:
         return False
 
 
-def _exec_status(ssh: paramiko.SSHClient, cmd: str) -> tuple[int, str]:
-    """원격 명령을 실행하고 (exit_status, stderr)를 반환한다(전송은 timeout 미설정)."""
+def _exec_status(
+    ssh: paramiko.SSHClient, cmd: str, cancel_event: threading.Event | None = None
+) -> tuple[int, str]:
+    """원격 명령을 실행하고 (exit_status, stderr)를 반환한다(전송은 timeout 미설정).
+
+    cancel_event가 set되면 채널을 닫아 원격 명령(curl)을 중단하고 TransferCanceled를 던진다.
+    """
     _, stdout, stderr = ssh.exec_command(cmd)
-    status = stdout.channel.recv_exit_status()
+    channel = stdout.channel
+    while not channel.exit_status_ready():
+        if cancel_event and cancel_event.is_set():
+            try:
+                channel.close()  # 채널 종료 → 원격 curl이 SIGHUP/파이프 끊김으로 중단
+            except Exception:
+                pass
+            raise TransferCanceled()
+        time.sleep(0.2)
+    status = channel.recv_exit_status()
     err = stderr.read().decode("utf-8", "replace").strip()
     return status, err
 
 
-def _direct_download(ssh, url: str, remote_path: str) -> tuple[bool, str]:
+def _direct_download(ssh, url: str, remote_path: str, cancel_event=None) -> tuple[bool, str]:
     parent = posixpath.dirname(remote_path)
     mk = f"mkdir -p {shlex.quote(parent)} && " if parent else ""
     cmd = f"{mk}curl -fsS --max-time 86400 -o {shlex.quote(remote_path)} {shlex.quote(url)}"
-    status, err = _exec_status(ssh, cmd)
+    status, err = _exec_status(ssh, cmd, cancel_event)
     return status == 0, err
 
 
-def _direct_upload(ssh, url: str, remote_path: str) -> tuple[bool, str]:
+def _direct_upload(ssh, url: str, remote_path: str, cancel_event=None) -> tuple[bool, str]:
     cmd = f"curl -fsS --max-time 86400 -X PUT -T {shlex.quote(remote_path)} {shlex.quote(url)}"
-    status, err = _exec_status(ssh, cmd)
+    status, err = _exec_status(ssh, cmd, cancel_event)
     return status == 0, err
 
 
@@ -176,6 +191,8 @@ def _run(
                 if ok:
                     return label, True, None
                 logger.warning("직통 실패(%s) → 릴레이 폴백: %s", label, err)
+            except TransferCanceled:
+                return label, False, "취소됨"
             except Exception as exc:
                 logger.warning("직통 예외(%s) → 릴레이 폴백: %s", label, exc)
         # 2) 릴레이 (직통 미사용이거나 직통 실패 시)
@@ -246,7 +263,7 @@ def s3_to_remote(
         url = s3_client.generate_presigned_url(
             "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=PRESIGN_EXPIRES
         )
-        ok, err = _direct_download(ssh, url, _remote_path(rel))
+        ok, err = _direct_download(ssh, url, _remote_path(rel), cancel_event)
         if ok and on_bytes:
             on_bytes(size)  # 직통은 파일 단위 진행
         return ok, err
@@ -393,7 +410,7 @@ def remote_to_s3(
         url = s3_client.generate_presigned_url(
             "put_object", Params={"Bucket": bucket, "Key": _s3_key(rel)}, ExpiresIn=PRESIGN_EXPIRES
         )
-        ok, err = _direct_upload(ssh, url, remote_path)
+        ok, err = _direct_upload(ssh, url, remote_path, cancel_event)
         if ok and on_bytes:
             on_bytes(size)
         return ok, err

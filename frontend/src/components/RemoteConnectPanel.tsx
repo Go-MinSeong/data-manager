@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { KeyRound, Server, Plus, Trash2, ChevronDown, Wifi } from 'lucide-react'
+import { KeyRound, Server, Plus, Trash2, ChevronDown, Wifi, RefreshCw } from 'lucide-react'
 import * as api from '../lib/api'
+import type { ProfileHealth } from '../lib/api'
 import { useAppStore } from '../store/appStore'
 import type { RemoteProfile } from '../types'
 
@@ -12,6 +13,8 @@ export function RemoteConnectPanel() {
   const [profiles, setProfiles] = useState<RemoteProfile[]>([])
   const [mode, setMode] = useState<Mode>('profile')
   const [loading, setLoading] = useState(false)
+  const [health, setHealth] = useState<Record<string, ProfileHealth>>({})
+  const [checking, setChecking] = useState(false)
 
   // profile mode
   const [selectedProfile, setSelectedProfile] = useState('')
@@ -41,8 +44,23 @@ export function RemoteConnectPanel() {
     }
   }
 
+  const loadHealth = async () => {
+    setChecking(true)
+    try {
+      const res = await api.getProfileHealth()
+      const map: Record<string, ProfileHealth> = {}
+      for (const r of res.results) map[r.name] = r
+      setHealth(map)
+    } catch {
+      // 점검 실패는 무시(미표시 상태로 둠)
+    } finally {
+      setChecking(false)
+    }
+  }
+
   useEffect(() => {
     void loadProfiles()
+    void loadHealth()
   }, [])
 
   const applyConnection = (res: {
@@ -271,24 +289,52 @@ export function RemoteConnectPanel() {
             </div>
             {profiles.length > 0 && (
               <div className="pt-2 border-t border-zinc-800">
-                <p className="text-xs text-zinc-500 mb-2">저장된 프로파일</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-zinc-500">저장된 프로파일</p>
+                  <button
+                    onClick={() => void loadHealth()}
+                    disabled={checking}
+                    title="연결 가능 여부 다시 점검"
+                    className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors"
+                  >
+                    <RefreshCw size={11} className={checking ? 'animate-spin' : ''} />
+                    점검
+                  </button>
+                </div>
                 <div className="space-y-1">
-                  {profiles.map(p => (
-                    <div key={p.name} className="flex items-center justify-between text-xs text-zinc-400">
-                      <span className="truncate">
-                        {p.name}
-                        <span className="text-zinc-600 ml-1">
-                          {p.username}@{p.host} · {p.authType === 'key' ? '🔑' : '••'}
+                  {profiles.map(p => {
+                    const h = health[p.name]
+                    const dot = !h
+                      ? 'bg-zinc-600'
+                      : h.reachable
+                        ? 'bg-emerald-500'
+                        : 'bg-red-500'
+                    const dotTitle = !h
+                      ? '미점검'
+                      : h.reachable
+                        ? `연결 가능${h.latencyMs != null ? ` · ${h.latencyMs}ms` : ''}`
+                        : '연결 불가 (서버 꺼짐·IP 차단·포트 닫힘)'
+                    return (
+                      <div key={p.name} className="flex items-center justify-between text-xs text-zinc-400">
+                        <span className="truncate flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${dot}`}
+                            title={dotTitle}
+                          />
+                          {p.name}
+                          <span className="text-zinc-600 ml-0.5">
+                            {p.username}@{p.host} · {p.authType === 'key' ? '🔑' : '••'}
+                          </span>
                         </span>
-                      </span>
-                      <button
-                        onClick={() => handleDelete(p.name)}
-                        className="p-1 hover:text-red-400 transition-colors shrink-0"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
+                        <button
+                          onClick={() => handleDelete(p.name)}
+                          className="p-1 hover:text-red-400 transition-colors shrink-0"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
