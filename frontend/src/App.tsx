@@ -125,6 +125,7 @@ function AppInner() {
               ) : (
                 <RemoteMainPanel
                   checkedKeys={checkedKeys}
+                  onCheckedChange={setCheckedKeys}
                   selectedDir={selectedRemoteDir}
                 />
               )}

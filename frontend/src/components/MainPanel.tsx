@@ -16,8 +16,7 @@ interface MainPanelProps {
   onCheckedChange?: (keys: Set<string>) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function MainPanel({ checkedKeys, onCheckedChange: _onCheckedChange }: MainPanelProps) {
+export function MainPanel({ checkedKeys, onCheckedChange }: MainPanelProps) {
   const { state, dispatch } = useAppStore()
 
   return (
@@ -46,7 +45,7 @@ export function MainPanel({ checkedKeys, onCheckedChange: _onCheckedChange }: Ma
           작업 이력은 볼 때마다 새로 로드되도록 조건부 렌더 유지. */}
       <div className="flex-1 overflow-y-auto">
         <div className={state.activeTab === 'download' ? '' : 'hidden'}>
-          <DownloadPanel checkedKeys={checkedKeys} />
+          <DownloadPanel checkedKeys={checkedKeys} onCheckedChange={onCheckedChange} />
         </div>
         <div className={state.activeTab === 'upload' ? '' : 'hidden'}>
           <UploadPanel />

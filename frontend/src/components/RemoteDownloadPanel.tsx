@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FolderOpen, Download, Gauge } from 'lucide-react'
+import { FolderOpen, Download, Gauge, X } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
 import { useAppStore } from '../store/appStore'
@@ -8,10 +8,16 @@ import { formatSpeed } from './ProgressBar'
 
 interface RemoteDownloadPanelProps {
   checkedKeys: Set<string>
+  onCheckedChange?: (keys: Set<string>) => void
 }
 
-export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
+export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDownloadPanelProps) {
   const { state, dispatch } = useAppStore()
+  const removeKey = (k: string) => {
+    const next = new Set(checkedKeys)
+    next.delete(k)
+    onCheckedChange?.(next)
+  }
   const [localDir, setLocalDir] = useState('')
   const [maxWorkers, setMaxWorkers] = useState(4)
   const [measuring, setMeasuring] = useState(false)
@@ -114,17 +120,33 @@ export function RemoteDownloadPanel({ checkedKeys }: RemoteDownloadPanelProps) {
 
         {/* 선택된 항목 */}
         <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 mb-4">
-          <span className="text-xs text-zinc-400 block mb-1">선택된 항목</span>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-zinc-400">선택된 항목 ({checkedKeys.size})</span>
+            {checkedKeys.size > 0 && onCheckedChange && (
+              <button
+                onClick={() => onCheckedChange(new Set())}
+                className="text-xs text-zinc-500 hover:text-red-400 transition-colors"
+              >
+                전체 해제
+              </button>
+            )}
+          </div>
           {checkedKeys.size === 0 ? (
             <p className="text-xs text-zinc-600">왼쪽 트리에서 파일/폴더를 선택하세요</p>
           ) : (
-            <div className="space-y-0.5">
-              {[...checkedKeys].slice(0, 5).map(k => (
-                <p key={k} className="text-xs text-zinc-300 font-mono truncate">{k}</p>
+            <div className="space-y-0.5 max-h-40 overflow-y-auto">
+              {[...checkedKeys].map(k => (
+                <div key={k} className="flex items-center gap-2 text-xs">
+                  <span className="flex-1 text-zinc-300 font-mono truncate">{k}</span>
+                  <button
+                    onClick={() => removeKey(k)}
+                    title="목록에서 제거"
+                    className="text-zinc-600 hover:text-red-400 transition-colors shrink-0"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
               ))}
-              {checkedKeys.size > 5 && (
-                <p className="text-xs text-zinc-500">... 외 {checkedKeys.size - 5}개</p>
-              )}
             </div>
           )}
         </div>
