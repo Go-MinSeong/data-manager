@@ -13,10 +13,11 @@ const TABS: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
 
 interface RemoteMainPanelProps {
   checkedKeys: Set<string>
+  onCheckedChange: (keys: Set<string>) => void
   selectedDir?: string
 }
 
-export function RemoteMainPanel({ checkedKeys, selectedDir }: RemoteMainPanelProps) {
+export function RemoteMainPanel({ checkedKeys, onCheckedChange, selectedDir }: RemoteMainPanelProps) {
   const { state, dispatch } = useAppStore()
 
   return (
@@ -40,7 +41,7 @@ export function RemoteMainPanel({ checkedKeys, selectedDir }: RemoteMainPanelPro
 
       <div className="flex-1 overflow-y-auto">
         <div className={state.activeTab === 'download' ? '' : 'hidden'}>
-          <RemoteDownloadPanel checkedKeys={checkedKeys} />
+          <RemoteDownloadPanel checkedKeys={checkedKeys} onCheckedChange={onCheckedChange} />
         </div>
         <div className={state.activeTab === 'upload' ? '' : 'hidden'}>
           <RemoteUploadPanel selectedDir={selectedDir} />

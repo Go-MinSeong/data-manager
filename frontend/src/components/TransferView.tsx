@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   ArrowLeftRight, Cloud, Server, Send, HardDrive, Gauge,
-  History, Wifi, LogOut, ChevronDown,
+  History, Wifi, LogOut, ChevronDown, X,
 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
@@ -292,15 +292,37 @@ export function TransferView() {
 
               {/* 선택된 항목 */}
               <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3">
-                <span className="text-xs text-zinc-400 block mb-1">선택된 항목 ({checkedKeys.size})</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-zinc-400">선택된 항목 ({checkedKeys.size})</span>
+                  {checkedKeys.size > 0 && (
+                    <button
+                      onClick={() => setCheckedKeys(new Set())}
+                      className="text-xs text-zinc-500 hover:text-red-400 transition-colors"
+                    >
+                      전체 해제
+                    </button>
+                  )}
+                </div>
                 {checkedKeys.size === 0 ? (
                   <p className="text-xs text-zinc-600">왼쪽 {srcIsS3 ? 'S3' : '원격'} 트리에서 파일/폴더를 선택하세요</p>
                 ) : (
-                  <div className="space-y-0.5">
-                    {[...checkedKeys].slice(0, 6).map(k => (
-                      <p key={k} className="text-xs text-zinc-300 font-mono truncate">{k}</p>
+                  <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                    {[...checkedKeys].map(k => (
+                      <div key={k} className="flex items-center gap-2 text-xs">
+                        <span className="flex-1 text-zinc-300 font-mono truncate">{k}</span>
+                        <button
+                          onClick={() => {
+                            const next = new Set(checkedKeys)
+                            next.delete(k)
+                            setCheckedKeys(next)
+                          }}
+                          title="목록에서 제거"
+                          className="text-zinc-600 hover:text-red-400 transition-colors shrink-0"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
                     ))}
-                    {checkedKeys.size > 6 && <p className="text-xs text-zinc-500">... 외 {checkedKeys.size - 6}개</p>}
                   </div>
                 )}
               </div>
