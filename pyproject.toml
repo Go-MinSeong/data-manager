@@ -1,7 +1,7 @@
 [project]
 name = "s3-manager"
-version = "1.0.0"
-description = "메뉴바 기반 AWS S3 다운로드/업로드/동기화 데스크톱 앱 (FastAPI + React + pywebview)"
+version = "2.0.0"
+description = "메뉴바 기반 데이터 전송 데스크톱 앱 — S3·원격 SFTP (FastAPI + React + pywebview)"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "boto3>=1.35.0",

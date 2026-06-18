@@ -1,3 +1,3 @@
-"""Data Manager — 메뉴바 기반 AWS S3 다운로드/업로드/동기화 데스크톱 앱."""
+"""Data Manager — 메뉴바 기반 데이터 전송 데스크톱 앱(S3·원격 SFTP)."""
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
