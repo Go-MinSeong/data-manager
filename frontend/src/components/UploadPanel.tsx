@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FilePlus, Upload, X } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import { useAppStore } from '../store/appStore'
 import { JobProgress } from './JobProgress'
 
@@ -14,6 +15,7 @@ export function UploadPanel() {
   const setJobId = (id: string | null) =>
     dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'upload', id } })
   const { state: jobState, close: closeJob } = useJob(jobId)
+  const { submitting, run } = useSubmitGuard()
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
@@ -161,12 +163,12 @@ export function UploadPanel() {
 
         {/* 업로드 버튼 */}
         <button
-          onClick={handleUpload}
-          disabled={!!isRunning || !state.selectedBucket || localPaths.length === 0}
+          onClick={() => run(handleUpload)}
+          disabled={!!isRunning || submitting || !state.selectedBucket || localPaths.length === 0}
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
         >
           <Upload size={15} />
-          업로드 시작
+          {submitting ? '시작 중...' : '업로드 시작'}
         </button>
       </div>
 

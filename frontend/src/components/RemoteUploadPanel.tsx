@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FilePlus, Upload, X, Gauge } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import { useAppStore } from '../store/appStore'
 import { JobProgress } from './JobProgress'
 import { formatSpeed } from './ProgressBar'
@@ -20,6 +21,7 @@ export function RemoteUploadPanel({ selectedDir }: RemoteUploadPanelProps) {
   const setJobId = (id: string | null) =>
     dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'remote-upload', id } })
   const { state: jobState, close: closeJob } = useJob(jobId)
+  const { submitting, run } = useSubmitGuard()
 
   // 사용자가 직접 수정하기 전에는 트리에서 선택한 디렉터리를 대상 경로로 따라간다.
   useEffect(() => {
@@ -195,12 +197,12 @@ export function RemoteUploadPanel({ selectedDir }: RemoteUploadPanelProps) {
         </div>
 
         <button
-          onClick={handleUpload}
-          disabled={!!isRunning || !state.remoteConnection.connected || localPaths.length === 0}
+          onClick={() => run(handleUpload)}
+          disabled={!!isRunning || submitting || !state.remoteConnection.connected || localPaths.length === 0}
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
         >
           <Upload size={15} />
-          업로드 시작
+          {submitting ? '시작 중...' : '업로드 시작'}
         </button>
       </div>
 
