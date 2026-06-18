@@ -6,6 +6,7 @@ import {
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
 import { useJob } from '../hooks/useJob'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import { JobProgress } from './JobProgress'
 import { TreeSidebar } from './TreeSidebar'
 import { RemoteTreeSidebar } from './RemoteTreeSidebar'
@@ -42,6 +43,7 @@ export function TransferView() {
   const setJobId = (id: string | null) =>
     dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'transfer', id } })
   const { state: jobState, close: closeJob } = useJob(jobId)
+  const { submitting, run } = useSubmitGuard()
 
   const [freeSpace, setFreeSpace] = useState<number | null>(null)
   const [measuring, setMeasuring] = useState(false)
@@ -428,9 +430,9 @@ export function TransferView() {
                   onChange={e => setMaxWorkers(Number(e.target.value))} className="w-full accent-blue-500" />
               </div>
 
-              <button onClick={handleTransfer} disabled={!!isRunning || checkedKeys.size === 0}
+              <button onClick={() => run(handleTransfer)} disabled={!!isRunning || submitting || checkedKeys.size === 0}
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
-                <Send size={15} /> 전송 시작
+                <Send size={15} /> {submitting ? '시작 중...' : '전송 시작'}
               </button>
 
               <p className="text-[11px] text-zinc-600">

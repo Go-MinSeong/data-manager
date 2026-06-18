@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FolderOpen, Download, Gauge, X } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import { useAppStore } from '../store/appStore'
 import { JobProgress } from './JobProgress'
 import { formatSpeed } from './ProgressBar'
@@ -26,6 +27,7 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
   const setJobId = (id: string | null) =>
     dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'remote-download', id } })
   const { state: jobState, close: closeJob } = useJob(jobId)
+  const { submitting, run } = useSubmitGuard()
 
   const handleMeasure = async () => {
     setMeasuring(true); setSpeed(null)
@@ -217,12 +219,12 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
         </div>
 
         <button
-          onClick={handleDownload}
-          disabled={!!isRunning || !state.remoteConnection.connected || checkedKeys.size === 0}
+          onClick={() => run(handleDownload)}
+          disabled={!!isRunning || submitting || !state.remoteConnection.connected || checkedKeys.size === 0}
           className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
         >
           <Download size={15} />
-          다운로드 시작
+          {submitting ? '시작 중...' : '다운로드 시작'}
         </button>
       </div>
 

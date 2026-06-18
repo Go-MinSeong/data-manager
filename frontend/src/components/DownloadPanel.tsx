@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FolderOpen, Download, Info, X } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import { useAppStore } from '../store/appStore'
 import { JobProgress } from './JobProgress'
 import { formatBytes } from './ProgressBar'
@@ -27,6 +28,7 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
   const [previewLoading, setPreviewLoading] = useState(false)
   const [freeSpace, setFreeSpace] = useState<number | null>(null)
   const { state: jobState, close: closeJob } = useJob(jobId)
+  const { submitting, run } = useSubmitGuard()
 
   // 저장 경로의 디스크 여유 공간 조회
   useEffect(() => {
@@ -241,12 +243,12 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
 
         {/* 다운로드 버튼 */}
         <button
-          onClick={handleDownload}
-          disabled={!!isRunning || !state.selectedBucket || checkedKeys.size === 0}
+          onClick={() => run(handleDownload)}
+          disabled={!!isRunning || submitting || !state.selectedBucket || checkedKeys.size === 0}
           className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
         >
           <Download size={15} />
-          다운로드 시작
+          {submitting ? '시작 중...' : '다운로드 시작'}
         </button>
       </div>
 
