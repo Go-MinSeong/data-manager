@@ -17,6 +17,7 @@ macOS 제약:
 
 from __future__ import annotations
 
+import logging
 import secrets
 import sys
 import threading
@@ -185,23 +186,38 @@ def main() -> None:
     # closing 이벤트 연결 (pywebview 5.x API)
     window.events.closing += on_closing
 
-    def _hide_from_dock() -> None:
-        """Dock 아이콘 숨기기 (메뉴바 전용 앱).
+    _dock_refs: list[object] = []
 
-        pywebview의 cocoa 백엔드가 import 시 ActivationPolicy를 Regular(0)로 강제해
-        LSUIElement 설정을 덮어쓴다. 런루프 시작 직후 메인 스레드에서 Accessory(1)로
-        되돌려 Dock에서 숨기되 메뉴바 상주·창 표시는 유지한다.
-        webview.start(func)로 등록되며 별도 스레드에서 호출되므로 메인 큐로 디스패치한다.
+    def _setup_dock_reopen() -> None:
+        """Dock 아이콘을 표시하고, 클릭(리오픈) 시 숨겨진 창을 다시 띄운다.
+
+        앱은 Dock 아이콘과 메뉴바 아이콘을 함께 쓴다(ActivationPolicy=Regular,
+        pywebview가 import 시 설정함). 창을 닫으면 숨기므로, Dock 아이콘을 누르면
+        창이 다시 보이도록 reopen 델리게이트를 단다. pywebview의 AppDelegate를 상속해
+        종료 처리 등 기존 동작은 그대로 유지한다.
         """
         try:
             import AppKit
+            from webview.platforms.cocoa import BrowserView
+
+            class _ReopenDelegate(BrowserView.AppDelegate):
+                def applicationShouldHandleReopen_hasVisibleWindows_(  # noqa: N802
+                    self, app, flag
+                ):
+                    try:
+                        show_window()
+                    except Exception:
+                        pass
+                    return True
 
             def _set() -> None:
-                AppKit.NSApplication.sharedApplication().setActivationPolicy_(1)  # Accessory
+                delegate = _ReopenDelegate.alloc().init()
+                _dock_refs.append(delegate)  # GC 방지
+                AppKit.NSApplication.sharedApplication().setDelegate_(delegate)
 
             AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(_set)
         except Exception:
-            pass
+            logging.getLogger(__name__).debug("Dock reopen 설정 실패", exc_info=True)
 
     def _unify_titlebar() -> None:
         """타이틀바를 앱 UI와 하나로 보이게 한다(창 표시 후 메인 스레드에서 적용).
@@ -271,8 +287,8 @@ def main() -> None:
             logging.getLogger(__name__).debug("파일 드롭 등록 실패", exc_info=True)
 
     def _on_start() -> None:
-        """런루프 시작 후 호출 — Dock 숨김."""
-        _hide_from_dock()
+        """런루프 시작 후 호출 — Dock 아이콘 리오픈 핸들러 설치."""
+        _setup_dock_reopen()
 
     # 창이 표시된 뒤에야 native(NSWindow)가 준비되므로 shown 이벤트에서 타이틀바를 통합한다.
     window.events.shown += _unify_titlebar

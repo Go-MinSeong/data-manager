@@ -199,6 +199,7 @@ def download_objects(
     max_workers: int = 5,
     on_bytes: BytesCallback | None = None,
     on_file: FileCallback | None = None,
+    on_total: "Callable[[int, int], None] | None" = None,
     cancel_event: threading.Event | None = None,
 ) -> tuple[int, int]:
     """여러 prefix(폴더) + keys(파일)를 로컬 디렉터리로 다운로드한다.
@@ -206,6 +207,8 @@ def download_objects(
     prefixes와 keys 중 하나 이상을 지정해야 한다.
     - 각 폴더는 local_dir/<폴더명>/<하위 구조>로 받는다(여러 폴더 충돌 방지).
     - 각 파일은 local_dir/<파일명>으로 받는다.
+    - on_total(count, bytes): 대상 열거 직후 1회 호출(진행률 총량 표시용). 이 열거를
+      그대로 다운로드에 재사용하므로 총량 파악을 위한 별도 LIST 요청이 필요 없다.
 
     Returns:
         (성공 개수, 실패 개수)
@@ -215,14 +218,19 @@ def download_objects(
 
     # 대상 (s3_key, local_relative_path) 수집
     targets: list[tuple[str, str]] = []
+    total_bytes = 0
     for prefix in prefixes or []:
         folder = prefix.rstrip("/").split("/")[-1] if prefix.rstrip("/") else ""
         for obj in list_all_objects(s3_client, bucket, prefix):
             stripped = _strip_prefix(obj["key"], prefix)
             rel = f"{folder}/{stripped}" if folder else stripped
             targets.append((obj["key"], rel))
+            total_bytes += obj.get("size", 0)
     for k in keys or []:
         targets.append((k, os.path.basename(k.rstrip("/"))))
+
+    if on_total:
+        on_total(len(targets), total_bytes)
 
     if not targets:
         return 0, 0

@@ -182,8 +182,8 @@ app = BUNDLE(
         "CFBundleVersion": "2.1.0",
         "CFBundleShortVersionString": "2.1.0",
 
-        # ★ Dock 아이콘 숨김 — 메뉴바 전용 앱
-        "LSUIElement": True,
+        # Dock 아이콘 표시 — 메뉴바 + Dock 병행
+        "LSUIElement": False,
 
         # 최소 macOS 버전
         "LSMinimumSystemVersion": "13.0",
