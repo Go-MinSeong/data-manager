@@ -1,10 +1,13 @@
 # 🚀 Data Manager
 
+![platform](https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-black)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![python](https://img.shields.io/badge/python-3.11%E2%80%933.12-3776ab)
+![stack](https://img.shields.io/badge/stack-FastAPI%20%C2%B7%20React%20%C2%B7%20pywebview-444)
+
 메뉴바 기반 **AWS S3 + 원격 SFTP 서버** 다운로드 · 업로드 macOS 데스크톱 앱.
 
-> 기존 Gradio 기반 `s3_downloader_portable`을 React UI + 네이티브 앱으로 재설계한 버전입니다.
-
-- 🧭 **메뉴바 상주** — 상단 메뉴바 아이콘 클릭으로 네이티브 창이 열립니다 (Dock 미표시).
+- 🧭 **메뉴바 + Dock** — 메뉴바 아이콘과 Dock 아이콘 모두에서 창을 열 수 있습니다.
 - ⚛️ **React + Tailwind UI** — 다크 테마, 버킷/폴더 트리 탐색기, 실시간 진행률.
 - 🔀 **S3 / 원격 모드 전환** — 상단 토글로 S3와 SFTP 원격 서버를 오가며 사용.
 - 🔐 **자격증명 안전 저장** — macOS Keychain + `~/.aws` 프로파일, SSH 키 + Keychain 모두 지원.
@@ -58,14 +61,14 @@ cd frontend && npm run dev
 bash packaging/build.sh
 # 산출물:
 #   dist/Data Manager.app          (실행용)
-#   dist/S3-Manager-arm64.zip    ← 동료에게 전달하는 배포본
+#   dist/Data-Manager-arm64.zip    ← 동료에게 전달하는 배포본
 ```
 
 빌드 순서: `frontend/dist` → PyInstaller(`packaging/s3manager.spec`) → ad-hoc 코드서명 → 배포용 zip(ditto).
 
 ### 다른 사람에게 배포
 1. `bash packaging/build.sh` 로 zip 생성.
-2. `dist/S3-Manager-<arch>.zip` 을 동료에게 전달.
+2. `dist/Data-Manager-<arch>.zip` 을 동료에게 전달.
 3. 받는 사람은 [`INSTALL.md`](INSTALL.md) 따라 설치(압축 해제 → /Applications → 첫 실행 우클릭 "열기").
 
 > ad-hoc 서명만 하므로 받는 쪽에서 첫 실행 시 Gatekeeper 경고가 뜬다(우클릭 열기 또는 `xattr -dr com.apple.quarantine`로 해결 — INSTALL.md 참고). 경고를 완전히 없애려면 Apple Developer ID 서명 + 공증(notarize)이 필요하다(유료 계정).
@@ -80,7 +83,7 @@ bash packaging/build.sh
 /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 -m venv .venv
 .venv/bin/pip install -e . pyinstaller
 # 3) universal2로 빌드
-S3M_ARCH=universal2 bash packaging/build.sh   # → dist/S3-Manager-universal2.zip
+S3M_ARCH=universal2 bash packaging/build.sh   # → dist/Data-Manager-universal2.zip
 ```
 
 > ⚠️ 프로젝트 이동/venv 재생성 후에는 반드시 `.venv`를 다시 만들 것. 콘솔스크립트(예: pyinstaller) shebang이 옛 경로를 가리켜 깨진다.
@@ -155,9 +158,7 @@ bash packaging/uninstall_autostart.sh
 data-manager/
 ├── API_CONTRACT.md           # 컴포넌트 간 인터페이스 계약
 ├── pyproject.toml
-├── qa_pipeline_test.py       # 잡/WebSocket 파이프라인 스모크 테스트
-├── qa_sftp_test.py           # SFTP 엔진 E2E(인메모리 SFTP 서버)
-├── qa_remote_http_test.py    # /api/remote/* HTTP E2E
+├── qa/                       # 스모크/E2E 스크립트 (인메모리 SFTP, 잡 파이프라인 등)
 ├── assets/                   # 트레이/앱 아이콘 (+ generate_icons.py)
 ├── packaging/
 │   ├── s3manager.spec        # PyInstaller 설정
@@ -169,3 +170,7 @@ data-manager/
     ├── server/               # FastAPI app · pydantic models
     └── shell/                # main · tray · bridge
 ```
+
+## 라이선스
+
+MIT — [LICENSE](LICENSE) 참고.
