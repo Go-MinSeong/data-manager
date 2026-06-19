@@ -234,12 +234,50 @@ def main() -> None:
         except Exception:
             pass
 
+    def _register_file_drop() -> None:
+        """Finder에서 끌어온 파일의 절대경로를 프론트엔드로 전달한다.
+
+        WKWebView의 JS는 드롭된 파일의 절대경로를 노출하지 않는다. pywebview는
+        네이티브 드롭에서 경로를 모아 Python DOM 이벤트의 pywebviewFullPath로 준다.
+        이를 받아 window.__onFilesDropped(paths)로 넘기면 React가 업로드 목록에 추가한다.
+        """
+        try:
+            import json as _json
+            from webview.dom import DOMEventHandler
+
+            def _on_drop(event) -> None:
+                try:
+                    files = (event or {}).get("dataTransfer", {}).get("files", []) or []
+                    paths = [f.get("pywebviewFullPath") for f in files]
+                    paths = [p for p in paths if p]
+                    if not paths:
+                        return
+                    window.evaluate_js(
+                        "window.__onFilesDropped && window.__onFilesDropped("
+                        + _json.dumps(paths)
+                        + ")"
+                    )
+                except Exception:
+                    logging.getLogger(__name__).debug("드롭 처리 실패", exc_info=True)
+
+            def _noop(_e) -> None:
+                return None
+
+            doc = window.dom.document
+            doc.events.dragenter += DOMEventHandler(_noop, prevent_default=True)
+            doc.events.dragover += DOMEventHandler(_noop, prevent_default=True)
+            doc.events.drop += DOMEventHandler(_on_drop, prevent_default=True)
+        except Exception:
+            logging.getLogger(__name__).debug("파일 드롭 등록 실패", exc_info=True)
+
     def _on_start() -> None:
         """런루프 시작 후 호출 — Dock 숨김."""
         _hide_from_dock()
 
     # 창이 표시된 뒤에야 native(NSWindow)가 준비되므로 shown 이벤트에서 타이틀바를 통합한다.
     window.events.shown += _unify_titlebar
+    # DOM 로드 후 파일 드래그-드롭 핸들러 등록
+    window.events.loaded += _register_file_drop
 
     # func은 런루프 시작 후 호출됨
     webview.start(_on_start)  # 메인 NSApp 런루프 구동 (메뉴바 아이콘도 함께 동작)

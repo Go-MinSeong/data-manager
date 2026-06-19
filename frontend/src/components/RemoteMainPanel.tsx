@@ -15,9 +15,11 @@ interface RemoteMainPanelProps {
   checkedKeys: Set<string>
   onCheckedChange: (keys: Set<string>) => void
   selectedDir?: string
+  uploadPreset?: { dir: string; nonce: number }
+  uploadFilesPreset?: { paths: string[]; nonce: number }
 }
 
-export function RemoteMainPanel({ checkedKeys, onCheckedChange, selectedDir }: RemoteMainPanelProps) {
+export function RemoteMainPanel({ checkedKeys, onCheckedChange, selectedDir, uploadPreset, uploadFilesPreset }: RemoteMainPanelProps) {
   const { state, dispatch } = useAppStore()
 
   return (
@@ -44,7 +46,7 @@ export function RemoteMainPanel({ checkedKeys, onCheckedChange, selectedDir }: R
           <RemoteDownloadPanel checkedKeys={checkedKeys} onCheckedChange={onCheckedChange} />
         </div>
         <div className={state.activeTab === 'upload' ? '' : 'hidden'}>
-          <RemoteUploadPanel selectedDir={selectedDir} />
+          <RemoteUploadPanel selectedDir={selectedDir} preset={uploadPreset} filesPreset={uploadFilesPreset} />
         </div>
         {state.activeTab === 'jobs' && <JobsPanel />}
       </div>

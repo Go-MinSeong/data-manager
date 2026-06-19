@@ -20,6 +20,38 @@ function AppInner() {
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set())
   const [selectedRemoteDir, setSelectedRemoteDir] = useState<string>('')
 
+  // 트리 우클릭 "업로드 위치로 설정" → 업로드 패널에 대상 경로 주입(nonce로 트리거)
+  const [s3UploadPreset, setS3UploadPreset] = useState({ prefix: '', nonce: 0 })
+  const [remoteUploadPreset, setRemoteUploadPreset] = useState({ dir: '', nonce: 0 })
+
+  const handleSetS3Upload = useCallback((bucket: string, prefix: string) => {
+    dispatch({ type: 'SET_BUCKET', payload: bucket })
+    setS3UploadPreset(p => ({ prefix, nonce: p.nonce + 1 }))
+    dispatch({ type: 'SET_TAB', payload: 'upload' })
+  }, [])
+
+  const handleSetRemoteUpload = useCallback((dir: string) => {
+    setRemoteUploadPreset(p => ({ dir, nonce: p.nonce + 1 }))
+    dispatch({ type: 'SET_TAB', payload: 'upload' })
+  }, [])
+
+  // 드래그-드롭 파일 — 셸(pywebview)이 window.__onFilesDropped(paths)로 절대경로 전달
+  const [s3UploadFiles, setS3UploadFiles] = useState({ paths: [] as string[], nonce: 0 })
+  const [remoteUploadFiles, setRemoteUploadFiles] = useState({ paths: [] as string[], nonce: 0 })
+
+  useEffect(() => {
+    ;(window as unknown as { __onFilesDropped?: (p: string[]) => void }).__onFilesDropped = (paths) => {
+      if (!Array.isArray(paths) || paths.length === 0) return
+      if (state.mode === 's3' && state.activeTab === 'upload') {
+        setS3UploadFiles(p => ({ paths, nonce: p.nonce + 1 }))
+      } else if (state.mode === 'remote' && state.activeTab === 'upload') {
+        setRemoteUploadFiles(p => ({ paths, nonce: p.nonce + 1 }))
+      } else {
+        dispatch({ type: 'ADD_TOAST', payload: { id: '', message: '업로드 탭에서 파일을 놓아주세요.', variant: 'info' } })
+      }
+    }
+  }, [state.mode, state.activeTab])
+
   // 저장된 테마 적용 (최초 1회)
   useEffect(() => { applyTheme(loadTheme()) }, [])
 
@@ -101,6 +133,7 @@ function AppInner() {
                   <TreeSidebar
                     checkedKeys={checkedKeys}
                     onCheckedChange={setCheckedKeys}
+                    onSetUploadDest={handleSetS3Upload}
                   />
                 ) : (
                   <RemoteTreeSidebar
@@ -108,6 +141,7 @@ function AppInner() {
                     onCheckedChange={setCheckedKeys}
                     onSelectDir={setSelectedRemoteDir}
                     selectedDir={selectedRemoteDir}
+                    onSetUploadDest={handleSetRemoteUpload}
                   />
                 )}
               </div>
@@ -121,12 +155,16 @@ function AppInner() {
                 <MainPanel
                   checkedKeys={checkedKeys}
                   onCheckedChange={setCheckedKeys}
+                  uploadPreset={s3UploadPreset}
+                  uploadFilesPreset={s3UploadFiles}
                 />
               ) : (
                 <RemoteMainPanel
                   checkedKeys={checkedKeys}
                   onCheckedChange={setCheckedKeys}
                   selectedDir={selectedRemoteDir}
+                  uploadPreset={remoteUploadPreset}
+                  uploadFilesPreset={remoteUploadFiles}
                 />
               )}
             </>

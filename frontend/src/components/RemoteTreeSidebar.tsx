@@ -14,9 +14,13 @@ import {
   CornerDownLeft,
   Star,
   ChevronRight as Chevron,
+  Copy,
+  FolderInput,
 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
+import { copyText } from '../lib/clipboard'
+import { ContextMenu, type MenuItem } from './ContextMenu'
 import type { TreeNode } from '../types'
 
 function formatSize(bytes: number): string {
@@ -31,6 +35,8 @@ interface RemoteTreeSidebarProps {
   onCheckedChange: (keys: Set<string>) => void
   onSelectDir?: (dir: string) => void
   selectedDir?: string
+  /** 우클릭 "업로드 위치로 설정" — 해당 경로를 업로드 대상으로 지정 */
+  onSetUploadDest?: (dir: string) => void
 }
 
 export function RemoteTreeSidebar({
@@ -38,9 +44,22 @@ export function RemoteTreeSidebar({
   onCheckedChange,
   onSelectDir,
   selectedDir,
+  onSetUploadDest,
 }: RemoteTreeSidebarProps) {
   const { state, dispatch } = useAppStore()
   const connected = state.remoteConnection.connected
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+
+  const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenu({ x: e.clientX, y: e.clientY, items })
+  }
+
+  const doCopy = async (text: string) => {
+    const ok = await copyText(text)
+    toast(ok ? '경로를 복사했습니다.' : '복사 실패', ok ? 'success' : 'error')
+  }
   const [rootPath, setRootPath] = useState<string>('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [children, setChildren] = useState<Map<string, TreeNode[]>>(new Map())
@@ -193,6 +212,17 @@ export function RemoteTreeSidebar({
               isChecked || isSelectedDir ? 'bg-zinc-800/50' : ''
             }`}
             style={{ paddingLeft: `${depth * 14 + 8}px` }}
+            onContextMenu={e =>
+              openMenu(
+                e,
+                node.isFolder
+                  ? [
+                      { label: '업로드 위치로 설정', icon: <FolderInput size={13} />, onClick: () => onSetUploadDest?.(dirPath) },
+                      { label: '경로 복사', icon: <Copy size={13} />, onClick: () => doCopy(dirPath) },
+                    ]
+                  : [{ label: '경로 복사', icon: <Copy size={13} />, onClick: () => doCopy(node.key) }],
+              )
+            }
           >
             <span
               onClick={() => node.isFolder && toggleFolder(node.key)}
@@ -405,6 +435,10 @@ export function RemoteTreeSidebar({
           <div>{renderNodes(visibleRootNodes, 0)}</div>
         )}
       </div>
+
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+      )}
     </aside>
   )
 }

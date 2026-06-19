@@ -53,9 +53,11 @@ from s3manager.server.models import (
     RemoteProfile,
     RemoteProfilesResponse,
     LocalFlatRequest,
+    RemoteFolderRequest,
     RemoteToRemoteRequest,
     RemoteToS3Request,
     RemoteUploadRequest,
+    S3FolderRequest,
     S3ToRemoteRequest,
     SetDefaultPathRequest,
     RevealRequest,
@@ -530,6 +532,19 @@ def list_objects(bucket: str, prefix: str = "") -> ObjectsResponse:
     return ObjectsResponse(prefix=prefix, folders=folders, objects=objects)
 
 
+@app.post("/api/objects/folder", response_model=OkResponse)
+def create_s3_folder(body: S3FolderRequest) -> OkResponse:
+    """S3에 빈 폴더(0바이트 키, 끝 '/')를 생성한다."""
+    client = _session.require_client()
+    if not body.key.strip("/"):
+        raise HTTPException(status_code=422, detail="폴더 이름이 비어 있습니다.")
+    try:
+        s3_engine.create_folder(client, body.bucket, body.key)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"폴더 생성 실패: {exc}")
+    return OkResponse(ok=True)
+
+
 # ---------------------------------------------------------------------------
 # 전송 작업
 # ---------------------------------------------------------------------------
@@ -799,6 +814,23 @@ def list_remote_objects(path: str = "") -> ObjectsResponse:
     # 실제 열거된 디렉터리(정규화 경로)를 prefix로 돌려준다.
     resolved = path or (_remote.home_dir or "")
     return ObjectsResponse(prefix=resolved, folders=folders, objects=objects)
+
+
+@app.post("/api/remote/folder", response_model=OkResponse)
+def create_remote_folder(body: RemoteFolderRequest) -> OkResponse:
+    """원격에 디렉터리를 생성한다(상위 경로 포함)."""
+    ssh = _remote.require_ssh()
+    if not body.path.strip().strip("/"):
+        raise HTTPException(status_code=422, detail="폴더 경로가 비어 있습니다.")
+    try:
+        sftp_engine.make_dir(ssh, body.path)
+    except Exception as exc:
+        transport = ssh.get_transport()
+        if transport is None or not transport.is_active():
+            _remote.disconnect()
+            raise HTTPException(status_code=409, detail="원격 서버 연결이 끊겼습니다. 다시 연결하세요.")
+        raise HTTPException(status_code=400, detail=f"폴더 생성 실패: {exc}")
+    return OkResponse(ok=True)
 
 
 @app.post("/api/remote/download", response_model=JobIdResponse)

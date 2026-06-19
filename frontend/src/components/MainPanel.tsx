@@ -14,9 +14,11 @@ const TABS: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
 interface MainPanelProps {
   checkedKeys: Set<string>
   onCheckedChange?: (keys: Set<string>) => void
+  uploadPreset?: { prefix: string; nonce: number }
+  uploadFilesPreset?: { paths: string[]; nonce: number }
 }
 
-export function MainPanel({ checkedKeys, onCheckedChange }: MainPanelProps) {
+export function MainPanel({ checkedKeys, onCheckedChange, uploadPreset, uploadFilesPreset }: MainPanelProps) {
   const { state, dispatch } = useAppStore()
 
   return (
@@ -48,7 +50,7 @@ export function MainPanel({ checkedKeys, onCheckedChange }: MainPanelProps) {
           <DownloadPanel checkedKeys={checkedKeys} onCheckedChange={onCheckedChange} />
         </div>
         <div className={state.activeTab === 'upload' ? '' : 'hidden'}>
-          <UploadPanel />
+          <UploadPanel preset={uploadPreset} filesPreset={uploadFilesPreset} />
         </div>
         {state.activeTab === 'jobs' && <JobsPanel />}
       </div>
