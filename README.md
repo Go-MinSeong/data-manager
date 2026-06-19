@@ -14,7 +14,10 @@
 - ⬇️⬆️ **다운로드 / 업로드** — 로컬↔S3, 로컬↔원격 서버. 동시 전송, 취소/이력 지원.
 - 📦 **단일 `.app` 배포** — PyInstaller로 독립 실행 앱 빌드.
 
-![Data Manager 스크린샷](docs/screenshot.png)
+|  |  |
+|---|---|
+| ![원격 트리·전송 화면](docs/screenshot.png) | ![연결 화면](docs/screenshot-connect.png) |
+| 원격 서버 트리 탐색 + 다운로드 패널 | AWS 연결 화면 |
 
 ## 아키텍처
 
