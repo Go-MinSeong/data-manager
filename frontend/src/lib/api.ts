@@ -159,6 +159,12 @@ export const startUpload = (body: {
 export const createS3Folder = (bucket: string, key: string) =>
   request<{ ok: true }>('POST', '/objects/folder', { bucket, key })
 
+export const getS3PreviewUrl = (bucket: string, key: string) =>
+  request<{ url: string }>(
+    'GET',
+    `/objects/preview-url?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`,
+  )
+
 // ── 원격(SFTP) 서버 ───────────────────────────────────────────────────────────
 
 export const getRemoteProfiles = () =>
@@ -277,6 +283,9 @@ export const startRemoteUpload = (body: {
 
 export const createRemoteFolder = (path: string) =>
   request<{ ok: true }>('POST', '/remote/folder', { path })
+
+export const getRemotePreview = (path: string) =>
+  request<{ dataUrl: string }>('GET', `/remote/preview?path=${encodeURIComponent(path)}`)
 
 // ── S3 ↔ 원격 전송 ────────────────────────────────────────────────────────────
 

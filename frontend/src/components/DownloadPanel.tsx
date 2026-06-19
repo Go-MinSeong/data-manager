@@ -21,6 +21,7 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
   }
   const [localDir, setLocalDir] = useState('')
   const [maxWorkers, setMaxWorkers] = useState(4)
+  const [pathInput, setPathInput] = useState('')
   const jobId = state.activeJobs['download'] ?? null
   const setJobId = (id: string | null) =>
     dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'download', id } })
@@ -51,6 +52,32 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
+  }
+
+  // s3://버킷/키 또는 (현재 버킷의) 키/prefix를 직접 입력해 선택에 추가
+  const addByPath = () => {
+    const raw = pathInput.trim()
+    if (!raw) return
+    let bucket = state.selectedBucket
+    let key = raw
+    const m = raw.match(/^s3:\/\/([^/]+)\/?(.*)$/i)
+    if (m) {
+      bucket = m[1]
+      key = m[2]
+    }
+    if (!bucket) { toast('버킷을 선택하거나 s3://버킷/키 형식으로 입력하세요.'); return }
+    if (!key) { toast('키(경로)를 입력하세요.'); return }
+    if (bucket !== state.selectedBucket) {
+      // 다른 버킷이면 전환하고 기존 선택은 초기화(단일 버킷 다운로드)
+      dispatch({ type: 'SET_BUCKET', payload: bucket })
+      onCheckedChange?.(new Set([key]))
+      toast(`버킷 전환: ${bucket}`, 'info')
+    } else {
+      const next = new Set(checkedKeys)
+      next.add(key)
+      onCheckedChange?.(next)
+    }
+    setPathInput('')
   }
 
   const handlePickFolder = async () => {
@@ -161,8 +188,26 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
               </button>
             </div>
           </div>
+          {/* 경로 직접 입력 (s3://버킷/키 붙여넣기) */}
+          <div className="flex gap-1.5 mb-2">
+            <input
+              value={pathInput}
+              onChange={e => setPathInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addByPath() }}
+              placeholder="s3://버킷/키 또는 키 입력 후 Enter"
+              spellCheck={false}
+              className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 font-mono placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={addByPath}
+              disabled={!pathInput.trim()}
+              className="px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-200 text-xs rounded transition-colors"
+            >
+              추가
+            </button>
+          </div>
           {checkedKeys.size === 0 ? (
-            <p className="text-xs text-zinc-600">왼쪽 트리에서 파일/폴더를 선택하세요</p>
+            <p className="text-xs text-zinc-600">왼쪽 트리에서 선택하거나 위에 경로를 입력하세요</p>
           ) : (
             <div className="space-y-0.5 max-h-40 overflow-y-auto">
               {[...checkedKeys].map(k => (

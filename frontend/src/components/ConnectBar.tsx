@@ -43,9 +43,19 @@ export function ConnectBar() {
   return (
     <>
     <header className="pywebview-drag-region h-11 flex items-center gap-3 pl-20 pr-4 bg-zinc-950 border-b border-zinc-800 shrink-0 select-none">
-      {/* 로고 */}
+      {/* 로고 — 구름은 테마 액센트(currentColor), 글자는 흰색 */}
       <div className="flex items-center gap-2 font-semibold text-sm text-zinc-200 mr-1">
-        <img src="./favicon.svg" alt="Data" className="w-5 h-5" />
+        <svg viewBox="0 0 64 64" className="w-5 h-5 text-blue-500 shrink-0" fill="currentColor" aria-label="Data">
+          <g>
+            <circle cx="17.9" cy="33.9" r="8.3" />
+            <circle cx="28.2" cy="28.8" r="10.6" />
+            <circle cx="38.4" cy="29.4" r="9.9" />
+            <circle cx="47.4" cy="33.9" r="8.3" />
+            <rect x="3.8" y="30.1" width="56.4" height="22.4" rx="10.9" />
+          </g>
+          <text x="32" y="41.5" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Helvetica, Arial, sans-serif" fontWeight="700" fontSize="16" fill="#ffffff">DATA</text>
+        </svg>
         Data Manager
       </div>
 

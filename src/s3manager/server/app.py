@@ -53,6 +53,8 @@ from s3manager.server.models import (
     RemoteProfile,
     RemoteProfilesResponse,
     LocalFlatRequest,
+    PreviewUrlResponse,
+    RemotePreviewResponse,
     RemoteFolderRequest,
     RemoteToRemoteRequest,
     RemoteToS3Request,
@@ -532,6 +534,19 @@ def list_objects(bucket: str, prefix: str = "") -> ObjectsResponse:
     return ObjectsResponse(prefix=prefix, folders=folders, objects=objects)
 
 
+@app.get("/api/objects/preview-url", response_model=PreviewUrlResponse)
+def s3_preview_url(bucket: str, key: str) -> PreviewUrlResponse:
+    """이미지 미리보기용 presigned GET URL(단기 만료)을 발급한다."""
+    client = _session.require_client()
+    try:
+        url = client.generate_presigned_url(
+            "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=300
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"미리보기 URL 생성 실패: {exc}")
+    return PreviewUrlResponse(url=url)
+
+
 @app.post("/api/objects/folder", response_model=OkResponse)
 def create_s3_folder(body: S3FolderRequest) -> OkResponse:
     """S3에 빈 폴더(0바이트 키, 끝 '/')를 생성한다."""
@@ -814,6 +829,28 @@ def list_remote_objects(path: str = "") -> ObjectsResponse:
     # 실제 열거된 디렉터리(정규화 경로)를 prefix로 돌려준다.
     resolved = path or (_remote.home_dir or "")
     return ObjectsResponse(prefix=resolved, folders=folders, objects=objects)
+
+
+@app.get("/api/remote/preview", response_model=RemotePreviewResponse)
+def remote_preview(path: str) -> RemotePreviewResponse:
+    """원격 이미지 파일을 읽어 data URL(base64)로 반환한다(미리보기용, 8MB 상한)."""
+    import base64
+    import mimetypes
+
+    ssh = _remote.require_ssh()
+    try:
+        data = sftp_engine.read_file_bytes(ssh, path, max_bytes=8 * 1024 * 1024)
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
+    except Exception as exc:
+        transport = ssh.get_transport()
+        if transport is None or not transport.is_active():
+            _remote.disconnect()
+            raise HTTPException(status_code=409, detail="원격 서버 연결이 끊겼습니다. 다시 연결하세요.")
+        raise HTTPException(status_code=400, detail=f"미리보기 실패: {exc}")
+    mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+    b64 = base64.b64encode(data).decode("ascii")
+    return RemotePreviewResponse(data_url=f"data:{mime};base64,{b64}")
 
 
 @app.post("/api/remote/folder", response_model=OkResponse)

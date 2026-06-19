@@ -11,10 +11,13 @@ from s3manager.core.jobs import job_manager
 
 
 def fake_download(s3_client, bucket, local_dir, *, prefixes=None, keys=None,
-                  max_workers=5, on_bytes=None, on_file=None, cancel_event=None):
+                  max_workers=5, on_bytes=None, on_file=None, on_total=None,
+                  cancel_event=None):
     """실제 다운로드 대신 진행률 콜백을 시뮬레이션."""
     prefix = (prefixes or [""])[0]
     files = ["a.txt", "b.txt", "c.txt"]
+    if on_total:
+        on_total(len(files), len(files) * 5 * 2048)
     for f in files:
         if cancel_event and cancel_event.is_set():
             break

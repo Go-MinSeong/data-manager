@@ -36,6 +36,16 @@ MAX_JOB_HISTORY = 100
 # 완료 알림 최소 소요 시간(초) — 이보다 짧은 성공 잡은 알림 생략(실패는 항상 알림)
 NOTIFY_MIN_SEC = 3.0
 
+def _set_local_totals(job: "JobState", local_paths: list[str]) -> None:
+    """업로드 잡의 총 파일 수·바이트를 로컬에서 미리 계산해 채운다(best-effort)."""
+    try:
+        files = s3_engine._collect_local_files(local_paths)
+        job.total_files = len(files)
+        job.total_bytes = sum(f.stat().st_size for f, _ in files)
+    except Exception:
+        pass
+
+
 # 잡 종류 → 사람이 읽는 라벨(알림용)
 JOB_KIND_LABELS = {
     "download": "다운로드",
@@ -390,21 +400,12 @@ class JobManager:
         """다운로드 잡을 생성하고 jobId를 반환한다."""
         job = self._new_job("download", local_dir=local_dir)
 
-        # 총 크기/파일 수 미리 파악 (best-effort, 실패해도 잡은 진행)
-        try:
-            total_files = 0
-            total_bytes = 0
-            for p in prefixes or []:
-                summary = s3_engine.flat_summary(s3_client, bucket, p)
-                total_files += summary["totalFiles"]
-                total_bytes += summary["totalBytes"]
-            total_files += len(keys or [])
-            job.total_files = total_files
-            job.total_bytes = total_bytes
-        except Exception:
-            pass
-
         on_bytes, on_file = self._make_callbacks(job)
+
+        def _on_total(count: int, total_bytes: int) -> None:
+            # 다운로드 직전 열거에서 총량을 받아 채운다(별도 LIST 요청 불필요).
+            job.total_files = count
+            job.total_bytes = total_bytes
 
         def task():
             return s3_engine.download_objects(
@@ -416,6 +417,7 @@ class JobManager:
                 max_workers=max_workers,
                 on_bytes=on_bytes,
                 on_file=on_file,
+                on_total=_on_total,
                 cancel_event=job._cancel_event,
             )
 
@@ -435,6 +437,7 @@ class JobManager:
         # reveal용: 업로드 소스의 상위 폴더(첫 경로 기준)
         src_dir = os.path.dirname(local_paths[0]) if local_paths else ""
         job = self._new_job("upload", local_dir=src_dir)
+        _set_local_totals(job, local_paths)
 
         on_bytes, on_file = self._make_callbacks(job)
 
@@ -511,6 +514,7 @@ class JobManager:
         """로컬 → 원격 업로드 잡을 생성하고 jobId를 반환한다."""
         src_dir = os.path.dirname(local_paths[0]) if local_paths else ""
         job = self._new_job("remote-upload", local_dir=src_dir)
+        _set_local_totals(job, local_paths)
 
         on_bytes, on_file = self._make_callbacks(job)
 
