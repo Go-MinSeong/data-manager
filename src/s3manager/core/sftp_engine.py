@@ -459,6 +459,20 @@ def _collect_local_files(local_paths: list[str]) -> list[tuple[Path, Path]]:
     return result
 
 
+def read_file_bytes(ssh: paramiko.SSHClient, path: str, max_bytes: int) -> bytes:
+    """원격 파일 전체를 읽어 바이트로 반환한다(미리보기용, max_bytes 초과 시 오류)."""
+    sftp = _open_sftp_retry(ssh)
+    try:
+        size = sftp.stat(path).st_size
+        if size > max_bytes:
+            raise ValueError(f"파일이 너무 큽니다({size}바이트, 최대 {max_bytes})")
+        with sftp.open(path, "rb") as f:
+            f.prefetch()
+            return f.read()
+    finally:
+        sftp.close()
+
+
 def make_dir(ssh: paramiko.SSHClient, path: str) -> None:
     """원격에 디렉터리를 생성한다(상위 경로 포함, mkdir -p)."""
     sftp = _open_sftp_retry(ssh)

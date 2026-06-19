@@ -153,6 +153,18 @@ class RemoteFolderRequest(CamelModel):
     path: str
 
 
+class PreviewUrlResponse(CamelModel):
+    """S3 객체 미리보기용 presigned GET URL."""
+
+    url: str
+
+
+class RemotePreviewResponse(CamelModel):
+    """원격 파일 미리보기용 data URL(base64)."""
+
+    data_url: str
+
+
 class JobIdResponse(CamelModel):
     job_id: str
 

@@ -14,11 +14,13 @@ import {
   X,
   Copy,
   FolderInput,
+  Image as ImageIcon,
 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
 import { copyText } from '../lib/clipboard'
 import { ContextMenu, type MenuItem } from './ContextMenu'
+import { ImagePreview, isImagePath } from './ImagePreview'
 import type { TreeNode } from '../types'
 
 function formatSize(bytes: number): string {
@@ -39,6 +41,16 @@ interface TreeSidebarProps {
 export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetUploadDest }: TreeSidebarProps) {
   const { state, dispatch } = useAppStore()
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+  const [preview, setPreview] = useState<{ src: string; title: string } | null>(null)
+
+  const openImagePreview = async (bucket: string, key: string, name: string) => {
+    try {
+      const r = await api.getS3PreviewUrl(bucket, key)
+      setPreview({ src: r.url, title: name })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '미리보기 실패')
+    }
+  }
 
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
     e.preventDefault()
@@ -216,7 +228,12 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
                       { label: '업로드 위치로 설정', icon: <FolderInput size={13} />, onClick: () => onSetUploadDest?.(bucket, node.key) },
                       { label: '경로 복사', icon: <Copy size={13} />, onClick: () => doCopy(node.key) },
                     ]
-                  : [{ label: '경로 복사', icon: <Copy size={13} />, onClick: () => doCopy(node.key) }],
+                  : [
+                      ...(isImagePath(node.name)
+                        ? [{ label: '미리보기', icon: <ImageIcon size={13} />, onClick: () => void openImagePreview(bucket, node.key, node.name) }]
+                        : []),
+                      { label: '경로 복사', icon: <Copy size={13} />, onClick: () => doCopy(node.key) },
+                    ],
               )
             }
           >
@@ -439,6 +456,9 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+      )}
+      {preview && (
+        <ImagePreview src={preview.src} title={preview.title} onClose={() => setPreview(null)} />
       )}
     </aside>
   )

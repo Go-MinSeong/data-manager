@@ -38,6 +38,7 @@ body {
   --color-zinc-400: #d0d0d0; --color-zinc-300: #d0d0d0; --color-zinc-200: #ffffff;
   --color-zinc-100: #ffffff; --color-zinc-50: #ffffff;
   --color-blue-600: #e82127; --color-blue-500: #ff3b41; --color-blue-400: #e82127;
+  --color-yellow-400: #caa84a; /* 폴더 아이콘 */
 }
 [data-theme="sunset"] {
   color-scheme: dark;
@@ -46,6 +47,7 @@ body {
   --color-zinc-400: #e8cdbf; --color-zinc-300: #e8cdbf; --color-zinc-200: #fbeee6;
   --color-zinc-100: #fbeee6; --color-zinc-50: #fbeee6;
   --color-blue-600: #ff7a59; --color-blue-500: #ff9676; --color-blue-400: #ff7a59;
+  --color-yellow-400: #ffb259; /* 폴더 아이콘 */
 }
 [data-theme="figma"] {
   color-scheme: light;
@@ -54,6 +56,7 @@ body {
   --color-zinc-400: #444444; --color-zinc-300: #444444; --color-zinc-200: #0d0d0d;
   --color-zinc-100: #0d0d0d; --color-zinc-50: #0d0d0d;
   --color-blue-600: #18a0fb; --color-blue-500: #0d99e8; --color-blue-400: #18a0fb;
+  --color-yellow-400: #e0a52e; /* 폴더 아이콘 */
 }
 [data-theme="stripe"] {
   color-scheme: light;
@@ -62,6 +65,7 @@ body {
   --color-zinc-400: #3c4257; --color-zinc-300: #3c4257; --color-zinc-200: #0a0e27;
   --color-zinc-100: #0a0e27; --color-zinc-50: #0a0e27;
   --color-blue-600: #635bff; --color-blue-500: #5851e6; --color-blue-400: #635bff;
+  --color-yellow-400: #c79100; /* 폴더 아이콘 */
 }
 [data-theme="sage"] {
   color-scheme: light;
@@ -70,6 +74,7 @@ body {
   --color-zinc-400: #38452f; --color-zinc-300: #38452f; --color-zinc-200: #1f2a1c;
   --color-zinc-100: #1f2a1c; --color-zinc-50: #1f2a1c;
   --color-blue-600: #2f7d4f; --color-blue-500: #36925c; --color-blue-400: #2f7d4f;
+  --color-yellow-400: #9c8b3d; /* 폴더 아이콘 */
 }
 
 #root {
