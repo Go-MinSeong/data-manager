@@ -42,7 +42,7 @@ export function ConnectBar() {
 
   return (
     <>
-    <header className="h-10 flex items-center gap-3 px-4 bg-zinc-950 border-b border-zinc-800 shrink-0 select-none">
+    <header className="pywebview-drag-region h-11 flex items-center gap-3 pl-20 pr-4 bg-zinc-950 border-b border-zinc-800 shrink-0 select-none">
       {/* 로고 */}
       <div className="flex items-center gap-2 font-semibold text-sm text-zinc-200 mr-1">
         <img src="./favicon.svg" alt="Data" className="w-5 h-5" />
