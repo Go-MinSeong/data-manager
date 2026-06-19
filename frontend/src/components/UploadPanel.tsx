@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { FilePlus, Upload, X } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
@@ -6,9 +6,19 @@ import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import { useAppStore } from '../store/appStore'
 import { JobProgress } from './JobProgress'
 
-export function UploadPanel() {
+interface UploadPanelProps {
+  /** 왼쪽 트리에서 "업로드 위치로 설정"하면 prefix를 채운다(nonce 변할 때 반영). */
+  preset?: { prefix: string; nonce: number }
+}
+
+export function UploadPanel({ preset }: UploadPanelProps) {
   const { state, dispatch } = useAppStore()
   const [prefix, setPrefix] = useState('')
+
+  // 트리에서 업로드 위치를 지정하면 prefix에 반영
+  useEffect(() => {
+    if (preset && preset.nonce > 0) setPrefix(preset.prefix)
+  }, [preset?.nonce]) // eslint-disable-line react-hooks/exhaustive-deps
   const [localPaths, setLocalPaths] = useState<string[]>([])
   const [maxWorkers, setMaxWorkers] = useState(4)
   const jobId = state.activeJobs['upload'] ?? null

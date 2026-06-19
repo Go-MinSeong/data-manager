@@ -12,9 +12,13 @@ import {
   EyeOff,
   Search,
   X,
+  Copy,
+  FolderInput,
 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
+import { copyText } from '../lib/clipboard'
+import { ContextMenu, type MenuItem } from './ContextMenu'
 import type { TreeNode } from '../types'
 
 function formatSize(bytes: number): string {
@@ -28,10 +32,24 @@ interface TreeSidebarProps {
   checkedKeys: Set<string>
   onCheckedChange: (keys: Set<string>) => void
   onNodeSelect?: (bucket: string, prefix: string, isFolder: boolean) => void
+  /** 우클릭 "업로드 위치로 설정" — 버킷+prefix를 업로드 대상으로 지정 */
+  onSetUploadDest?: (bucket: string, prefix: string) => void
 }
 
-export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect }: TreeSidebarProps) {
+export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetUploadDest }: TreeSidebarProps) {
   const { state, dispatch } = useAppStore()
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+
+  const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenu({ x: e.clientX, y: e.clientY, items })
+  }
+
+  const doCopy = async (text: string) => {
+    const ok = await copyText(text)
+    toast(ok ? '경로를 복사했습니다.' : '복사 실패', ok ? 'success' : 'error')
+  }
   const [buckets, setBuckets] = useState<{ name: string; region: string | null }[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [children, setChildren] = useState<Map<string, TreeNode[]>>(new Map())
@@ -190,6 +208,17 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect }: Tree
               isChecked ? 'bg-zinc-800/50' : ''
             }`}
             style={{ paddingLeft: `${depth * 14 + 8}px` }}
+            onContextMenu={e =>
+              openMenu(
+                e,
+                node.isFolder
+                  ? [
+                      { label: '업로드 위치로 설정', icon: <FolderInput size={13} />, onClick: () => onSetUploadDest?.(bucket, node.key) },
+                      { label: '경로 복사', icon: <Copy size={13} />, onClick: () => doCopy(node.key) },
+                    ]
+                  : [{ label: '경로 복사', icon: <Copy size={13} />, onClick: () => doCopy(node.key) }],
+              )
+            }
           >
             {/* 펼치기 아이콘 */}
             <span
@@ -350,6 +379,12 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect }: Tree
                 <div key={bucket.name}>
                   <div
                     onClick={() => toggleBucket(bucket.name)}
+                    onContextMenu={e =>
+                      openMenu(e, [
+                        { label: '업로드 위치로 설정', icon: <FolderInput size={13} />, onClick: () => onSetUploadDest?.(bucket.name, '') },
+                        { label: '경로 복사', icon: <Copy size={13} />, onClick: () => doCopy(bucket.name) },
+                      ])
+                    }
                     className={`group flex items-center gap-1.5 px-2 py-1.5 cursor-pointer text-xs transition-colors hover:bg-zinc-800 ${
                       isSelected ? 'bg-zinc-800/70 text-zinc-100' : 'text-zinc-300'
                     } ${isHidden ? 'opacity-50' : ''}`}
@@ -400,6 +435,10 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect }: Tree
           {showHidden ? <EyeOff size={12} /> : <Eye size={12} />}
           {showHidden ? '숨긴 버킷 가리기' : `숨긴 버킷 ${hiddenCount}개 보기`}
         </button>
+      )}
+
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
       )}
     </aside>
   )

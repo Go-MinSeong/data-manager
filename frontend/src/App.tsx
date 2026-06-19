@@ -20,6 +20,21 @@ function AppInner() {
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set())
   const [selectedRemoteDir, setSelectedRemoteDir] = useState<string>('')
 
+  // 트리 우클릭 "업로드 위치로 설정" → 업로드 패널에 대상 경로 주입(nonce로 트리거)
+  const [s3UploadPreset, setS3UploadPreset] = useState({ prefix: '', nonce: 0 })
+  const [remoteUploadPreset, setRemoteUploadPreset] = useState({ dir: '', nonce: 0 })
+
+  const handleSetS3Upload = useCallback((bucket: string, prefix: string) => {
+    dispatch({ type: 'SET_BUCKET', payload: bucket })
+    setS3UploadPreset(p => ({ prefix, nonce: p.nonce + 1 }))
+    dispatch({ type: 'SET_TAB', payload: 'upload' })
+  }, [])
+
+  const handleSetRemoteUpload = useCallback((dir: string) => {
+    setRemoteUploadPreset(p => ({ dir, nonce: p.nonce + 1 }))
+    dispatch({ type: 'SET_TAB', payload: 'upload' })
+  }, [])
+
   // 저장된 테마 적용 (최초 1회)
   useEffect(() => { applyTheme(loadTheme()) }, [])
 
@@ -101,6 +116,7 @@ function AppInner() {
                   <TreeSidebar
                     checkedKeys={checkedKeys}
                     onCheckedChange={setCheckedKeys}
+                    onSetUploadDest={handleSetS3Upload}
                   />
                 ) : (
                   <RemoteTreeSidebar
@@ -108,6 +124,7 @@ function AppInner() {
                     onCheckedChange={setCheckedKeys}
                     onSelectDir={setSelectedRemoteDir}
                     selectedDir={selectedRemoteDir}
+                    onSetUploadDest={handleSetRemoteUpload}
                   />
                 )}
               </div>
@@ -121,12 +138,14 @@ function AppInner() {
                 <MainPanel
                   checkedKeys={checkedKeys}
                   onCheckedChange={setCheckedKeys}
+                  uploadPreset={s3UploadPreset}
                 />
               ) : (
                 <RemoteMainPanel
                   checkedKeys={checkedKeys}
                   onCheckedChange={setCheckedKeys}
                   selectedDir={selectedRemoteDir}
+                  uploadPreset={remoteUploadPreset}
                 />
               )}
             </>

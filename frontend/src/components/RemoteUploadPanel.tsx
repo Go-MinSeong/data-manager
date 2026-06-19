@@ -9,9 +9,11 @@ import { formatSpeed } from './ProgressBar'
 
 interface RemoteUploadPanelProps {
   selectedDir?: string
+  /** 트리에서 "업로드 위치로 설정"하면 대상 경로를 강제로 채운다(nonce 변할 때). */
+  preset?: { dir: string; nonce: number }
 }
 
-export function RemoteUploadPanel({ selectedDir }: RemoteUploadPanelProps) {
+export function RemoteUploadPanel({ selectedDir, preset }: RemoteUploadPanelProps) {
   const { state, dispatch } = useAppStore()
   const [remoteDir, setRemoteDir] = useState('')
   const [touched, setTouched] = useState(false)
@@ -27,6 +29,11 @@ export function RemoteUploadPanel({ selectedDir }: RemoteUploadPanelProps) {
   useEffect(() => {
     if (!touched && selectedDir) setRemoteDir(selectedDir)
   }, [selectedDir, touched])
+
+  // 트리에서 "업로드 위치로 설정"하면 사용자 편집 여부와 무관하게 강제로 채운다.
+  useEffect(() => {
+    if (preset && preset.nonce > 0) { setRemoteDir(preset.dir); setTouched(true) }
+  }, [preset?.nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [measuring, setMeasuring] = useState(false)
   const [speed, setSpeed] = useState<{ up: number; down: number } | null>(null)
