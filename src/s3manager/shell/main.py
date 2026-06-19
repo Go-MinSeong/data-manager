@@ -99,6 +99,10 @@ def main() -> None:
     # 4. pywebview 창 생성 (아직 start 전)
     import webview
 
+    # 드래그 영역: 클래스(.pywebview-drag-region)를 "직접" 클릭할 때만 창 이동.
+    # 헤더의 빈 영역을 끌면 창이 움직이고, 그 안의 버튼 클릭은 드래그로 새지 않는다.
+    webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
+
     window = webview.create_window(
         title=settings.APP_NAME,
         url=f"{settings.BASE_URL}/?t={auth_token}",
@@ -199,8 +203,46 @@ def main() -> None:
         except Exception:
             pass
 
-    # func은 런루프 시작 후 호출됨 → 거기서 Dock 숨김 처리
-    webview.start(_hide_from_dock)  # 메인 NSApp 런루프 구동 (메뉴바 아이콘도 함께 동작)
+    def _unify_titlebar() -> None:
+        """타이틀바를 앱 UI와 하나로 보이게 한다(창 표시 후 메인 스레드에서 적용).
+
+        제목 막대를 투명화·텍스트 숨김하고 콘텐츠 뷰를 창 최상단까지 확장한다.
+        pywebview가 타이틀바에 칠한 배경색을 투명으로 되돌려 앱의 어두운 헤더가
+        그대로 비치게 한다. macOS 신호등(닫기·최소화·확대) 버튼은 그대로 유지된다.
+        """
+        try:
+            import AppKit
+
+            ns = getattr(window, "native", None)
+            if ns is None:
+                return
+
+            def _apply() -> None:
+                ns.setTitlebarAppearsTransparent_(True)
+                ns.setTitleVisibility_(1)  # NSWindowTitleHidden
+                # NSFullSizeContentViewWindowMask(1<<15) — 콘텐츠를 타이틀바 아래까지 채움
+                ns.setStyleMask_(ns.styleMask() | (1 << 15))
+                # pywebview가 타이틀바에 칠한 회색(windowBackgroundColor)을 투명으로 되돌림
+                try:
+                    titlebar = ns.contentView().superview().subviews().lastObject()
+                    titlebar.setBackgroundColor_(AppKit.NSColor.clearColor())
+                except Exception:
+                    pass
+                ns.displayIfNeeded()
+
+            AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(_apply)
+        except Exception:
+            pass
+
+    def _on_start() -> None:
+        """런루프 시작 후 호출 — Dock 숨김."""
+        _hide_from_dock()
+
+    # 창이 표시된 뒤에야 native(NSWindow)가 준비되므로 shown 이벤트에서 타이틀바를 통합한다.
+    window.events.shown += _unify_titlebar
+
+    # func은 런루프 시작 후 호출됨
+    webview.start(_on_start)  # 메인 NSApp 런루프 구동 (메뉴바 아이콘도 함께 동작)
 
     # 참조 유지 (린터의 미사용 변수 경고 방지 겸)
     del _tray_refs
