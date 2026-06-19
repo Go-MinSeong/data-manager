@@ -15,9 +15,10 @@ interface MainPanelProps {
   checkedKeys: Set<string>
   onCheckedChange?: (keys: Set<string>) => void
   uploadPreset?: { prefix: string; nonce: number }
+  uploadFilesPreset?: { paths: string[]; nonce: number }
 }
 
-export function MainPanel({ checkedKeys, onCheckedChange, uploadPreset }: MainPanelProps) {
+export function MainPanel({ checkedKeys, onCheckedChange, uploadPreset, uploadFilesPreset }: MainPanelProps) {
   const { state, dispatch } = useAppStore()
 
   return (
@@ -49,7 +50,7 @@ export function MainPanel({ checkedKeys, onCheckedChange, uploadPreset }: MainPa
           <DownloadPanel checkedKeys={checkedKeys} onCheckedChange={onCheckedChange} />
         </div>
         <div className={state.activeTab === 'upload' ? '' : 'hidden'}>
-          <UploadPanel preset={uploadPreset} />
+          <UploadPanel preset={uploadPreset} filesPreset={uploadFilesPreset} />
         </div>
         {state.activeTab === 'jobs' && <JobsPanel />}
       </div>

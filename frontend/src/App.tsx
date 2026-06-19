@@ -35,6 +35,23 @@ function AppInner() {
     dispatch({ type: 'SET_TAB', payload: 'upload' })
   }, [])
 
+  // 드래그-드롭 파일 — 셸(pywebview)이 window.__onFilesDropped(paths)로 절대경로 전달
+  const [s3UploadFiles, setS3UploadFiles] = useState({ paths: [] as string[], nonce: 0 })
+  const [remoteUploadFiles, setRemoteUploadFiles] = useState({ paths: [] as string[], nonce: 0 })
+
+  useEffect(() => {
+    ;(window as unknown as { __onFilesDropped?: (p: string[]) => void }).__onFilesDropped = (paths) => {
+      if (!Array.isArray(paths) || paths.length === 0) return
+      if (state.mode === 's3' && state.activeTab === 'upload') {
+        setS3UploadFiles(p => ({ paths, nonce: p.nonce + 1 }))
+      } else if (state.mode === 'remote' && state.activeTab === 'upload') {
+        setRemoteUploadFiles(p => ({ paths, nonce: p.nonce + 1 }))
+      } else {
+        dispatch({ type: 'ADD_TOAST', payload: { id: '', message: '업로드 탭에서 파일을 놓아주세요.', variant: 'info' } })
+      }
+    }
+  }, [state.mode, state.activeTab])
+
   // 저장된 테마 적용 (최초 1회)
   useEffect(() => { applyTheme(loadTheme()) }, [])
 
@@ -139,6 +156,7 @@ function AppInner() {
                   checkedKeys={checkedKeys}
                   onCheckedChange={setCheckedKeys}
                   uploadPreset={s3UploadPreset}
+                  uploadFilesPreset={s3UploadFiles}
                 />
               ) : (
                 <RemoteMainPanel
@@ -146,6 +164,7 @@ function AppInner() {
                   onCheckedChange={setCheckedKeys}
                   selectedDir={selectedRemoteDir}
                   uploadPreset={remoteUploadPreset}
+                  uploadFilesPreset={remoteUploadFiles}
                 />
               )}
             </>

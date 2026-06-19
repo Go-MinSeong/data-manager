@@ -320,6 +320,12 @@ def upload_single(
         return False
 
 
+def create_folder(s3_client: boto3.client, bucket: str, key: str) -> None:
+    """S3에 빈 폴더(0바이트, key 끝에 '/')를 생성한다."""
+    folder_key = key if key.endswith("/") else key + "/"
+    s3_client.put_object(Bucket=bucket, Key=folder_key, Body=b"")
+
+
 def upload_objects(
     s3_client: boto3.client,
     bucket: str,

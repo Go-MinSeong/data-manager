@@ -140,6 +140,19 @@ class UploadRequest(CamelModel):
     max_workers: int = 5
 
 
+class S3FolderRequest(CamelModel):
+    """S3 빈 폴더 생성 요청 — key는 폴더 경로(끝 '/'는 자동 보정)."""
+
+    bucket: str
+    key: str
+
+
+class RemoteFolderRequest(CamelModel):
+    """원격 디렉터리 생성 요청."""
+
+    path: str
+
+
 class JobIdResponse(CamelModel):
     job_id: str
 

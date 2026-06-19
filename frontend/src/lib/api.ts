@@ -156,6 +156,9 @@ export const startUpload = (body: {
   maxWorkers?: number
 }) => request<{ jobId: string }>('POST', '/upload', body)
 
+export const createS3Folder = (bucket: string, key: string) =>
+  request<{ ok: true }>('POST', '/objects/folder', { bucket, key })
+
 // ── 원격(SFTP) 서버 ───────────────────────────────────────────────────────────
 
 export const getRemoteProfiles = () =>
@@ -271,6 +274,9 @@ export const startRemoteUpload = (body: {
   localPaths: string[]
   maxWorkers?: number
 }) => request<{ jobId: string }>('POST', '/remote/upload', body)
+
+export const createRemoteFolder = (path: string) =>
+  request<{ ok: true }>('POST', '/remote/folder', { path })
 
 // ── S3 ↔ 원격 전송 ────────────────────────────────────────────────────────────
 

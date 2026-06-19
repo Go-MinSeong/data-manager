@@ -459,6 +459,15 @@ def _collect_local_files(local_paths: list[str]) -> list[tuple[Path, Path]]:
     return result
 
 
+def make_dir(ssh: paramiko.SSHClient, path: str) -> None:
+    """원격에 디렉터리를 생성한다(상위 경로 포함, mkdir -p)."""
+    sftp = _open_sftp_retry(ssh)
+    try:
+        _sftp_makedirs(sftp, path)
+    finally:
+        sftp.close()
+
+
 def _sftp_makedirs(sftp: paramiko.SFTPClient, remote_dir: str) -> None:
     """원격 디렉터리를 재귀적으로 생성한다(mkdir -p)."""
     parts = remote_dir.strip("/").split("/")
