@@ -1,6 +1,6 @@
 [project]
-name = "s3-manager"
-version = "2.2.0"
+name = "data-manager"
+version = "2.2.1"
 description = "메뉴바 기반 데이터 전송 데스크톱 앱 — S3·원격 SFTP (FastAPI + React + pywebview)"
 requires-python = ">=3.11,<3.13"
 dependencies = [
@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.scripts]
-s3-manager = "s3manager.shell.main:main"
+data-manager = "s3manager.shell.main:main"
 
 [project.optional-dependencies]
 build = ["pyinstaller>=6.10.0"]

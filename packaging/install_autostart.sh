@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-LABEL="ai.nota.s3manager"
+LABEL="io.github.go-minseong.datamanager"
 PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
 
 # 1) .app 경로 결정

@@ -39,7 +39,7 @@ uv pip install -e .
 cd frontend && npm install && npm run build && cd ..
 
 # 3) 앱 실행 (메뉴바 + 창)
-uv run s3-manager
+uv run data-manager
 #   또는: uv run python -m s3manager.shell.main
 ```
 
@@ -111,7 +111,7 @@ S3M_ARCH=universal2 bash packaging/build.sh   # → dist/S3-Manager-universal2.z
    [default]
    aws_access_key_id = AKIA...
    aws_secret_access_key = ...
-   [nota-prod]
+   [my-prod]
    aws_access_key_id = AKIA...
    aws_secret_access_key = ...
    ```
@@ -152,7 +152,7 @@ bash packaging/uninstall_autostart.sh
 ## 프로젝트 구조
 
 ```
-s3-manager/
+data-manager/
 ├── API_CONTRACT.md           # 컴포넌트 간 인터페이스 계약
 ├── pyproject.toml
 ├── qa_pipeline_test.py       # 잡/WebSocket 파이프라인 스모크 테스트

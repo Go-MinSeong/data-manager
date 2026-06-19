@@ -2,7 +2,7 @@
 # Data Manager 자동 실행 해제 스크립트
 set -euo pipefail
 
-LABEL="ai.nota.s3manager"
+LABEL="io.github.go-minseong.datamanager"
 PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
 UID_NUM="$(id -u)"
 

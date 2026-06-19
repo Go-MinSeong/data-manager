@@ -171,16 +171,16 @@ app = BUNDLE(
     coll,
     name="Data Manager.app",
     icon=str(PROJECT_ROOT / "assets" / "app_icon.icns"),
-    bundle_identifier="ai.nota.s3manager",
+    bundle_identifier="io.github.go-minseong.datamanager",
 
     # Info.plist 보강
     info_plist={
         # 앱 표시 이름
         "CFBundleName": "Data Manager",
         "CFBundleDisplayName": "Data Manager",
-        "CFBundleIdentifier": "ai.nota.s3manager",
-        "CFBundleVersion": "2.2.0",
-        "CFBundleShortVersionString": "2.2.0",
+        "CFBundleIdentifier": "io.github.go-minseong.datamanager",
+        "CFBundleVersion": "2.2.1",
+        "CFBundleShortVersionString": "2.2.1",
 
         # Dock 아이콘 표시 — 메뉴바 + Dock 병행
         "LSUIElement": False,
@@ -210,7 +210,7 @@ app = BUNDLE(
         },
 
         # Keychain 접근 그룹
-        "keychain-access-groups": ["ai.nota.s3manager"],
+        "keychain-access-groups": ["io.github.go-minseong.datamanager"],
 
         # 고해상도(Retina) 지원
         "NSHighResolutionCapable": True,
