@@ -179,8 +179,8 @@ app = BUNDLE(
         "CFBundleName": "Data Manager",
         "CFBundleDisplayName": "Data Manager",
         "CFBundleIdentifier": "ai.nota.s3manager",
-        "CFBundleVersion": "2.0.0",
-        "CFBundleShortVersionString": "2.0.0",
+        "CFBundleVersion": "2.1.0",
+        "CFBundleShortVersionString": "2.1.0",
 
         # ★ Dock 아이콘 숨김 — 메뉴바 전용 앱
         "LSUIElement": True,

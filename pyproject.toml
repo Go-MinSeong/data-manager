@@ -1,6 +1,6 @@
 [project]
 name = "s3-manager"
-version = "2.0.0"
+version = "2.1.0"
 description = "메뉴바 기반 데이터 전송 데스크톱 앱 — S3·원격 SFTP (FastAPI + React + pywebview)"
 requires-python = ">=3.11,<3.13"
 dependencies = [
