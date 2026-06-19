@@ -24,7 +24,7 @@
 ```ts
 // 자격증명 프로파일 (목록 표시용 — 비밀키 미포함)
 Profile = {
-  name: string            // 표시 이름 ("default", "nota-prod", ...)
+  name: string            // 표시 이름 ("default", "my-prod", ...)
   source: "aws" | "keychain"  // ~/.aws/credentials 유래 | 앱이 Keychain에 저장
   region: string | null
 }
@@ -96,7 +96,7 @@ Job = {
 S3와 독립된 "활성 원격 연결" 1개를 서버 메모리에 보관한다(SSH/paramiko). 잡·WebSocket·pick/reveal은 S3와 공유한다.
 - `GET  /api/remote/profiles` → `{ profiles: RemoteProfile[] }`
   - `RemoteProfile = { name, host, port, username, authType: "key"|"password", keyPath: string|null }` (비밀 미포함)
-  - 메타데이터는 `~/Library/Application Support/S3Manager/remote_profiles.json`, 비밀(키 passphrase/password)은 Keychain(`ai.nota.s3manager.remote`).
+  - 메타데이터는 `~/Library/Application Support/S3Manager/remote_profiles.json`, 비밀(키 passphrase/password)은 Keychain(`io.github.go-minseong.datamanager.remote`).
 - `POST /api/remote/profiles` body `{ name, host, port?, username, authType, keyPath?, secret? }` → `{ ok: true }`
   - `secret`은 Keychain에만 저장. `secret` 생략 시 기존 비밀 유지(메타만 갱신).
 - `DELETE /api/remote/profiles/{name}` → `{ ok: true }`

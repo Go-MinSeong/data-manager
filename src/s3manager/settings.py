@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Data Manager"
-APP_ID = "ai.nota.s3manager"
+APP_ID = "io.github.go-minseong.datamanager"
 
 # 로컬 FastAPI 서버 바인딩 (외부 노출 금지)
 HOST = "127.0.0.1"
@@ -17,7 +17,7 @@ PORT = 8765
 BASE_URL = f"http://{HOST}:{PORT}"
 
 # Keychain(서비스 이름) — keyring이 macOS Keychain에 저장할 때 사용
-KEYRING_SERVICE = "ai.nota.s3manager"
+KEYRING_SERVICE = "io.github.go-minseong.datamanager"
 
 # 앱 사용자 데이터 디렉터리 (이력/설정 저장용)
 APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "S3Manager"
