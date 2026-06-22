@@ -179,8 +179,8 @@ app = BUNDLE(
         "CFBundleName": "Data Manager",
         "CFBundleDisplayName": "Data Manager",
         "CFBundleIdentifier": "io.github.go-minseong.datamanager",
-        "CFBundleVersion": "2.2.2",
-        "CFBundleShortVersionString": "2.2.2",
+        "CFBundleVersion": "2.2.3",
+        "CFBundleShortVersionString": "2.2.3",
 
         # Dock 아이콘 표시 — 메뉴바 + Dock 병행
         "LSUIElement": False,
