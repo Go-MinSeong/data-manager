@@ -45,8 +45,8 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
 
   const openImagePreview = async (bucket: string, key: string, name: string) => {
     try {
-      const r = await api.getS3PreviewUrl(bucket, key)
-      setPreview({ src: r.url, title: name })
+      const r = await api.getS3Preview(bucket, key)
+      setPreview({ src: r.dataUrl, title: name })
     } catch (e) {
       toast(e instanceof Error ? e.message : '미리보기 실패')
     }

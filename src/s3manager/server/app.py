@@ -12,6 +12,7 @@ from typing import Any, Protocol, Union
 
 import boto3
 import paramiko
+from botocore.exceptions import ClientError
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -44,6 +45,7 @@ from s3manager.server.models import (
     PickFolderResponse,
     Profile,
     ProfilesResponse,
+    PreviewDataResponse,
     DiskSpaceResponse,
     MeasureResponse,
     ProfileHealth,
@@ -71,6 +73,7 @@ from s3manager.server.models import (
 )
 
 logger = logging.getLogger(__name__)
+MAX_IMAGE_PREVIEW_BYTES = 16 * 1024 * 1024
 
 # ---------------------------------------------------------------------------
 # Native bridge 프로토콜 및 주입
@@ -545,6 +548,51 @@ def s3_preview_url(bucket: str, key: str) -> PreviewUrlResponse:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"미리보기 URL 생성 실패: {exc}")
     return PreviewUrlResponse(url=url)
+
+
+@app.get("/api/objects/preview", response_model=PreviewDataResponse)
+def s3_preview(bucket: str, key: str) -> PreviewDataResponse:
+    """S3 이미지 파일을 읽어 data URL(base64)로 반환한다(미리보기용, 16MB 상한)."""
+    import base64
+    import mimetypes
+
+    client = _session.require_client()
+    body = None
+    try:
+        obj = client.get_object(Bucket=bucket, Key=key)
+        body = obj["Body"]
+        size = int(obj.get("ContentLength") or 0)
+        if size > MAX_IMAGE_PREVIEW_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"파일이 너무 큽니다({size}바이트, 최대 {MAX_IMAGE_PREVIEW_BYTES})",
+            )
+        data = body.read(MAX_IMAGE_PREVIEW_BYTES + 1)
+        if len(data) > MAX_IMAGE_PREVIEW_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"파일이 너무 큽니다(최대 {MAX_IMAGE_PREVIEW_BYTES}바이트)",
+            )
+    except HTTPException:
+        raise
+    except ClientError as exc:
+        err = exc.response.get("Error", {})
+        code = str(err.get("Code", ""))
+        status = 404 if code in {"404", "NoSuchKey", "NotFound"} else 500
+        msg = err.get("Message") or str(exc)
+        raise HTTPException(status_code=status, detail=f"미리보기 실패: {msg}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"미리보기 실패: {exc}")
+    finally:
+        if body is not None:
+            try:
+                body.close()
+            except Exception:
+                pass
+
+    mime = mimetypes.guess_type(key)[0] or obj.get("ContentType") or "application/octet-stream"
+    b64 = base64.b64encode(data).decode("ascii")
+    return PreviewDataResponse(data_url=f"data:{mime};base64,{b64}")
 
 
 @app.post("/api/objects/folder", response_model=OkResponse)

@@ -165,6 +165,12 @@ export const getS3PreviewUrl = (bucket: string, key: string) =>
     `/objects/preview-url?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`,
   )
 
+export const getS3Preview = (bucket: string, key: string) =>
+  request<{ dataUrl: string }>(
+    'GET',
+    `/objects/preview?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`,
+  )
+
 // ── 원격(SFTP) 서버 ───────────────────────────────────────────────────────────
 
 export const getRemoteProfiles = () =>

@@ -80,6 +80,10 @@ Job = {
   - prefix 미지정 시 루트. 트리 lazy-load 용도.
 - `GET  /api/objects/flat?bucket=<b>&prefix=<p>` → prefix 하위 **전체 파일**(재귀) + 합계
   → `{ totalFiles: number, totalBytes: number }`  (다운로드 전 크기 미리보기용)
+- `GET  /api/objects/preview?bucket=<b>&key=<k>` → S3 이미지 객체 미리보기용 data URL
+  → `{ dataUrl: string }`  (16MB 상한, UI 기본 사용)
+- `GET  /api/objects/preview-url?bucket=<b>&key=<k>` → S3 이미지 객체 presigned GET URL
+  → `{ url: string }`  (호환용)
 
 ### 전송 작업 (비동기 잡)
 - `POST /api/download` body `{ bucket, prefix?, keys?: string[], localDir, maxWorkers? }` → `{ jobId }`

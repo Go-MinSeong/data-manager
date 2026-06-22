@@ -159,6 +159,12 @@ class PreviewUrlResponse(CamelModel):
     url: str
 
 
+class PreviewDataResponse(CamelModel):
+    """이미지 미리보기용 data URL(base64)."""
+
+    data_url: str
+
+
 class RemotePreviewResponse(CamelModel):
     """원격 파일 미리보기용 data URL(base64)."""
 
