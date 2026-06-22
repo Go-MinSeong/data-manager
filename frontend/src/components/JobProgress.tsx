@@ -36,7 +36,7 @@ export function JobProgress({ jobId, jobState, onDismiss }: JobProgressProps) {
             <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
             <div>
               <p className="text-sm font-medium text-zinc-200">전송 완료</p>
-              <p className="text-xs text-zinc-400 mt-0.5">
+              <p className="text-xs text-zinc-400 mt-0.5 tabular-nums">
                 성공 {done.success}건 / 실패 {done.failure}건 · {done.elapsedSec.toFixed(1)}초
                 {avgBps > 0 && <> · 평균 {formatSpeed(avgBps)}</>}
               </p>
@@ -114,7 +114,7 @@ export function JobProgress({ jobId, jobState, onDismiss }: JobProgressProps) {
       {progress && (
         <>
           <ProgressBar value={pct} />
-          <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
+          <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400 tabular-nums">
             <div>
               <span className="text-zinc-200">{progress.completedFiles}</span>
               {' / '}

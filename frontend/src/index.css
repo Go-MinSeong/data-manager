@@ -8,6 +8,14 @@
   box-sizing: border-box;
 }
 
+/* 텍스트 줄바꿈 — 제목은 균등 배분, 본문/설명은 고아 단어 방지 */
+h1, h2, h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+
 html,
 body {
   height: 100%;

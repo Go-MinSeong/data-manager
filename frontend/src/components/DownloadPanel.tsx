@@ -270,7 +270,7 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
               >
                 추천
               </button>
-              <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+              <span className="text-xs text-zinc-200 font-medium tabular-nums">{maxWorkers}</span>
             </div>
           </div>
           <input
@@ -290,7 +290,7 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
         <button
           onClick={() => run(handleDownload)}
           disabled={!!isRunning || submitting || !state.selectedBucket || checkedKeys.size === 0}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-[background-color,scale] duration-150 active:scale-[0.96]"
         >
           <Download size={15} />
           {submitting ? '시작 중...' : '다운로드 시작'}

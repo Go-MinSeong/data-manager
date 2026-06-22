@@ -199,7 +199,7 @@ export function JobsPanel() {
                 </div>
 
                 {/* 통계 */}
-                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-zinc-500">
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-zinc-500 tabular-nums">
                   <div>
                     <span className="text-zinc-300">{job.completedFiles}</span>/{job.totalFiles}파일
                     {job.failedFiles > 0 && (
@@ -214,7 +214,7 @@ export function JobsPanel() {
                 {(job.status === 'running' || job.status === 'done') && job.totalBytes > 0 && (
                   <div className="mt-2 h-1 bg-zinc-700 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-blue-500 rounded-full transition-all"
+                      className="h-full bg-blue-500 rounded-full transition-[width] duration-200"
                       style={{ width: `${Math.round(progress * 100)}%` }}
                     />
                   </div>

@@ -9,7 +9,7 @@ export function ProgressBar({ value, className = '', color = 'bg-blue-500' }: Pr
   return (
     <div className={`relative h-1.5 bg-zinc-800 rounded-full overflow-hidden ${className}`}>
       <div
-        className={`absolute inset-y-0 left-0 rounded-full transition-all duration-200 ${color}`}
+        className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-200 ${color}`}
         style={{ width: `${pct}%` }}
       />
     </div>

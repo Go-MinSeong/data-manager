@@ -283,7 +283,7 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
 
             {/* 파일 크기 */}
             {!node.isFolder && node.size !== undefined && (
-              <span className="text-zinc-600 text-[10px] shrink-0 pl-1">{formatSize(node.size)}</span>
+              <span className="text-zinc-600 text-[10px] shrink-0 pl-1 tabular-nums">{formatSize(node.size)}</span>
             )}
           </div>
 

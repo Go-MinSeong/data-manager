@@ -217,7 +217,7 @@ export function UploadPanel({ preset, filesPreset }: UploadPanelProps) {
               >
                 추천
               </button>
-              <span className="text-xs text-zinc-200 font-medium">{maxWorkers}</span>
+              <span className="text-xs text-zinc-200 font-medium tabular-nums">{maxWorkers}</span>
             </div>
           </div>
           <input
@@ -234,7 +234,7 @@ export function UploadPanel({ preset, filesPreset }: UploadPanelProps) {
         <button
           onClick={() => run(handleUpload)}
           disabled={!!isRunning || submitting || !state.selectedBucket || localPaths.length === 0}
-          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-[background-color,scale] duration-150 active:scale-[0.96]"
         >
           <Upload size={15} />
           {submitting ? '시작 중...' : '업로드 시작'}
