@@ -43,7 +43,7 @@ function Toast({ message, variant, onClose }: ToastProps) {
 
   return (
     <div
-      className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg border shadow-lg backdrop-blur-sm max-w-sm text-sm ${colors[variant]}`}
+      className={`dm-toast pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg border shadow-lg backdrop-blur-sm max-w-sm text-sm ${colors[variant]}`}
     >
       <Icon size={16} className="mt-0.5 shrink-0" />
       <span className="flex-1">{message}</span>

@@ -112,3 +112,41 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-zinc-600, #52525b);
 }
+
+/* ── 진입 애니메이션 (CSS-only, motion 의존 없음) ───────────────────────────
+   opacity + translateY + blur 조합, 키프레임은 마운트당 1회만 실행. */
+@keyframes dm-rise {
+  from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
+}
+@keyframes dm-pop {
+  from { opacity: 0; transform: scale(0.96); filter: blur(4px); }
+  to   { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+@keyframes dm-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 단일 요소 진입 */
+.dm-enter { animation: dm-rise 0.4s cubic-bezier(0.2, 0, 0, 1) both; }
+/* 토스트 진입 */
+.dm-toast { animation: dm-rise 0.28s cubic-bezier(0.2, 0, 0, 1) both; }
+/* 모달 오버레이 / 팝(컨텍스트 메뉴·이미지) */
+.dm-overlay { animation: dm-fade 0.18s ease-out both; }
+.dm-pop { animation: dm-pop 0.22s cubic-bezier(0.2, 0, 0, 1) both; }
+
+/* 컨테이너의 직계 자식을 순차(stagger) 진입 */
+.dm-stagger > * { animation: dm-rise 0.4s cubic-bezier(0.2, 0, 0, 1) both; }
+.dm-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.dm-stagger > *:nth-child(2) { animation-delay: 55ms; }
+.dm-stagger > *:nth-child(3) { animation-delay: 110ms; }
+.dm-stagger > *:nth-child(4) { animation-delay: 165ms; }
+.dm-stagger > *:nth-child(5) { animation-delay: 220ms; }
+.dm-stagger > *:nth-child(6) { animation-delay: 275ms; }
+.dm-stagger > *:nth-child(n+7) { animation-delay: 330ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-enter, .dm-toast, .dm-overlay, .dm-pop,
+  .dm-stagger > * { animation: none; opacity: 1; filter: none; transform: none; }
+}

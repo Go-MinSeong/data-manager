@@ -124,7 +124,7 @@ export function ConnectPanel() {
 
   return (
     <div className="flex-1 flex items-center justify-center bg-zinc-950">
-      <div className="w-full max-w-md bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl p-6">
+      <div className="dm-stagger w-full max-w-md bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl p-6">
         <h2 className="text-lg font-semibold text-zinc-100 mb-1">AWS 연결</h2>
         <p className="text-xs text-zinc-500 mb-5">S3 버킷에 접근하려면 자격증명이 필요합니다.</p>
 

@@ -43,7 +43,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     <div
       ref={ref}
       style={style}
-      className="fixed z-50 min-w-[170px] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl py-1 text-xs"
+      className="dm-pop origin-top-left fixed z-50 min-w-[170px] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl py-1 text-xs"
     >
       {items.map((it, i) => (
         <button

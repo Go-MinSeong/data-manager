@@ -248,7 +248,7 @@ export function RemoteConnectPanel() {
 
   return (
     <div className="flex-1 flex items-center justify-center bg-zinc-950">
-      <div className="w-full max-w-md bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl p-6">
+      <div className="dm-stagger w-full max-w-md bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl p-6">
         <h2 className="text-lg font-semibold text-zinc-100 mb-1">원격 서버 연결</h2>
         <p className="text-xs text-zinc-500 mb-5">SFTP(SSH)로 원격 서버에 접속합니다.</p>
 

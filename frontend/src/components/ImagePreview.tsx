@@ -22,9 +22,9 @@ export function ImagePreview({ src, title, onClose }: ImagePreviewProps) {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[60] bg-black/75 flex items-center justify-center p-8"
+      className="dm-overlay fixed inset-0 z-[60] bg-black/75 flex items-center justify-center p-8"
     >
-      <div onClick={e => e.stopPropagation()} className="flex flex-col items-center gap-2 max-w-full max-h-full">
+      <div onClick={e => e.stopPropagation()} className="dm-pop flex flex-col items-center gap-2 max-w-full max-h-full">
         <img
           src={src}
           alt={title}
