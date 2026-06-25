@@ -49,6 +49,13 @@ def _set_local_totals(job: "JobState", local_paths: list[str]) -> None:
         pass
 
 
+def _set_route(job: "JobState", source: str, dest: str, items: list[str] | None) -> None:
+    """잡의 출발/도착 위치와 대상 항목(상세 보기용)을 기록한다."""
+    job.source = source
+    job.dest = dest
+    job.items = [str(x) for x in (items or [])][:MAX_FAILED_ITEMS]
+
+
 # 잡 종류 → 사람이 읽는 라벨(알림용)
 JOB_KIND_LABELS = {
     "download": "다운로드",
@@ -83,6 +90,11 @@ class JobState:
     finished_at: datetime | None = None
     error: str | None = None
     current_file: str = ""
+    # 출발/도착 위치 표기(상세 보기용)
+    source: str = ""
+    dest: str = ""
+    # 전송 대상 항목(소스 경로들, 상세 보기용, 최대 MAX_FAILED_ITEMS개)
+    items: list[str] = field(default_factory=list)
     # 실패한 파일 목록(상세 보기용, 최대 MAX_FAILED_ITEMS개)
     failed_items: list[dict[str, str]] = field(default_factory=list)
 
@@ -112,6 +124,9 @@ class JobState:
             "startedAt": self.started_at.isoformat() if self.started_at else None,
             "finishedAt": self.finished_at.isoformat() if self.finished_at else None,
             "error": self.error,
+            "source": self.source,
+            "dest": self.dest,
+            "items": self.items,
             "failedItems": self.failed_items,
         }
 
@@ -132,6 +147,9 @@ class JobState:
         job.started_at = _dt(d.get("startedAt"))
         job.finished_at = _dt(d.get("finishedAt"))
         job.error = d.get("error")
+        job.source = d.get("source", "")
+        job.dest = d.get("dest", "")
+        job.items = d.get("items", []) or []
         job.failed_items = d.get("failedItems", []) or []
         return job
 
@@ -408,6 +426,7 @@ class JobManager:
     ) -> str:
         """다운로드 잡을 생성하고 jobId를 반환한다."""
         job = self._new_job("download", local_dir=local_dir)
+        _set_route(job, f"s3://{bucket}", local_dir, (prefixes or []) + (keys or []))
 
         on_bytes, on_file = self._make_callbacks(job)
 
@@ -447,6 +466,7 @@ class JobManager:
         src_dir = os.path.dirname(local_paths[0]) if local_paths else ""
         job = self._new_job("upload", local_dir=src_dir)
         _set_local_totals(job, local_paths)
+        _set_route(job, "로컬", f"s3://{bucket}/{prefix}", local_paths)
 
         on_bytes, on_file = self._make_callbacks(job)
 
@@ -480,6 +500,7 @@ class JobManager:
     ) -> str:
         """원격 → 로컬 다운로드 잡을 생성하고 jobId를 반환한다."""
         job = self._new_job("remote-download", local_dir=local_dir)
+        _set_route(job, "원격", local_dir, (remote_dirs or []) + (keys or []))
 
         # 총 크기/파일 수 미리 파악 (best-effort)
         try:
@@ -524,6 +545,7 @@ class JobManager:
         src_dir = os.path.dirname(local_paths[0]) if local_paths else ""
         job = self._new_job("remote-upload", local_dir=src_dir)
         _set_local_totals(job, local_paths)
+        _set_route(job, "로컬", f"원격:{remote_dir}", local_paths)
 
         on_bytes, on_file = self._make_callbacks(job)
 
@@ -558,6 +580,7 @@ class JobManager:
     ) -> str:
         """S3 → 원격 전송 잡을 생성한다."""
         job = self._new_job("s3-to-remote")
+        _set_route(job, f"s3://{bucket}", f"원격:{remote_dir}", (prefixes or []) + (keys or []))
         try:
             targets = transfer_engine._enumerate_s3(s3_client, bucket, prefixes, keys)
             s = transfer_engine.summarize(targets)
@@ -592,6 +615,7 @@ class JobManager:
     ) -> str:
         """원격 → S3 전송 잡을 생성한다."""
         job = self._new_job("remote-to-s3")
+        _set_route(job, "원격", f"s3://{bucket}/{prefix}", (remote_dirs or []) + (keys or []))
         try:
             targets = transfer_engine._enumerate_remote(ssh, remote_dirs, keys)
             s = transfer_engine.summarize(targets)
@@ -625,6 +649,7 @@ class JobManager:
     ) -> str:
         """원격 → 원격 전송 잡을 생성한다(Mac 경유 릴레이)."""
         job = self._new_job("remote-to-remote")
+        _set_route(job, "원격(소스)", f"원격(대상):{dest_dir}", (src_dirs or []) + (src_keys or []))
         try:
             targets = transfer_engine._enumerate_remote(ssh_src, src_dirs, src_keys)
             s = transfer_engine.summarize(targets)

@@ -106,8 +106,25 @@ export function TransferView() {
     }
   }
 
-  const swapDirection = () => {
-    setDirection(d => (d === 's3-to-remote' ? 'remote-to-s3' : d === 'remote-to-s3' ? 's3-to-remote' : d))
+  const swapDirection = async () => {
+    if (direction === 's3-to-remote') { setDirection('remote-to-s3'); return }
+    if (direction === 'remote-to-s3') { setDirection('s3-to-remote'); return }
+    // 원격 → 원격: 소스(주 원격)와 대상(B) 서버를 맞바꾼다.
+    if (!bConn.connected) { toast('대상 원격도 연결되어야 스왑할 수 있습니다.'); return }
+    try {
+      await api.swapRemotes()
+      const [a, b] = await Promise.all([api.getRemoteConnection(), api.getRemoteBConnection()])
+      dispatch({ type: 'SET_REMOTE_CONNECTION', payload: a })
+      setBConn(b)
+      setCheckedKeys(new Set())
+      setSelectedRemoteDir('')
+      setRemoteTouched(false)
+      setDestBDir(b.homeDir ?? '')
+      setTransferBytes(null)
+      toast('소스 ↔ 대상 서버를 교체했습니다.', 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '서버 스왑 실패')
+    }
   }
 
   // 목적지(기본 원격) 경로 기본값 = 홈/선택 폴더
@@ -324,8 +341,12 @@ export function TransferView() {
             <DirectionPicker direction={direction} onChange={setDirection} />
             <button
               onClick={swapDirection}
-              disabled={direction === 'remote-to-remote'}
-              title={direction === 'remote-to-remote' ? '원격→원격은 스왑 미지원' : '방향 바꾸기 (S3 ↔ 원격)'}
+              disabled={direction === 'remote-to-remote' && !bConn.connected}
+              title={
+                direction === 'remote-to-remote'
+                  ? '소스 ↔ 대상 서버 교체'
+                  : '방향 바꾸기 (S3 ↔ 원격)'
+              }
               className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-100 disabled:text-zinc-700 disabled:hover:bg-transparent px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
             >
               <ArrowLeftRight size={13} /> 스왑

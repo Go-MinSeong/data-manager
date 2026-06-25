@@ -335,6 +335,8 @@ export const getRemoteBConnection = () =>
 
 export const remoteBDisconnect = () => request<{ ok: true }>('POST', '/remote-b/disconnect')
 
+export const swapRemotes = () => request<{ ok: true }>('POST', '/remote/swap')
+
 export const getRemoteBObjects = (path?: string) => {
   const qs = path ? `?path=${encodeURIComponent(path)}` : ''
   return request<{

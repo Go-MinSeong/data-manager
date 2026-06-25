@@ -959,6 +959,18 @@ def remote_b_connect(body: dict) -> JSONResponse:
     return _connect_into(_remote_b, body)
 
 
+@app.post("/api/remote/swap", response_model=OkResponse)
+def swap_remotes() -> OkResponse:
+    """주 원격(_remote)과 대상 원격(_remote_b) 세션을 맞바꾼다(원격→원격 방향 스왑).
+
+    이후 /api/remote/* 는 기존 B를, /api/remote-b/* 는 기존 A를 가리킨다.
+    프론트는 두 연결 상태를 다시 조회해 트리·대상 브라우저를 갱신한다.
+    """
+    global _remote, _remote_b
+    _remote, _remote_b = _remote_b, _remote
+    return OkResponse(ok=True)
+
+
 @app.get("/api/remote-b/connection", response_model=RemoteConnectionStatusResponse)
 async def get_remote_b_connection() -> RemoteConnectionStatusResponse:
     if not _remote_b.connected:

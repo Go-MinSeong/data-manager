@@ -56,6 +56,8 @@ export function JobDetail({ job, kindLabel, statusLabel, statusColor, onClose, o
 
         <div className="divide-y divide-zinc-800">
           <Row label="상태"><span className={statusColor}>{statusLabel}</span></Row>
+          {job.source && <Row label="출발"><span className="font-mono">{job.source}</span></Row>}
+          {job.dest && <Row label="도착"><span className="font-mono">{job.dest}</span></Row>}
           <Row label="파일">
             {job.completedFiles}/{job.totalFiles}
             {job.failedFiles > 0 && <span className="text-red-400 ml-1">({job.failedFiles} 실패)</span>}
@@ -82,6 +84,19 @@ export function JobDetail({ job, kindLabel, statusLabel, statusColor, onClose, o
         {job.error && (
           <div className="mt-3 p-2.5 rounded-lg bg-red-950/50 border border-red-900 text-[11px] text-red-300 break-all">
             {job.error}
+          </div>
+        )}
+
+        {job.items && job.items.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs text-zinc-400 mb-1.5">대상 항목 ({job.items.length})</p>
+            <div className="space-y-0.5 max-h-40 overflow-y-auto">
+              {job.items.map((it, i) => (
+                <div key={i} className="text-[11px] font-mono text-zinc-400 break-all bg-zinc-800/40 rounded px-2 py-0.5">
+                  {it}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

@@ -191,6 +191,9 @@ class Job(CamelModel):
     started_at: str | None = None
     finished_at: str | None = None
     error: str | None = None
+    source: str = ""
+    dest: str = ""
+    items: list[str] = []
     failed_items: list[FailedItem] = []
 
 

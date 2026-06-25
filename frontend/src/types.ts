@@ -44,6 +44,9 @@ export interface Job {
   startedAt: string | null
   finishedAt: string | null
   error: string | null
+  source?: string
+  dest?: string
+  items?: string[]
   failedItems?: { key: string; error: string }[]
 }
 
