@@ -158,6 +158,7 @@ export function RemoteTreeSidebar({
     }
   }, [])
 
+  // 연결 상태뿐 아니라 연결된 서버(host)·기본폴더가 바뀌면(예: 원격↔원격 스왑) 루트를 다시 로드한다.
   useEffect(() => {
     if (connected) {
       // 프로파일에 저장된 기본 폴더가 있으면 거기서, 없으면 홈에서 시작
@@ -167,7 +168,7 @@ export function RemoteTreeSidebar({
       setChildren(new Map())
       setExpanded(new Set())
     }
-  }, [connected]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connected, state.remoteConnection.host, state.remoteConnection.defaultPath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveDefaultFolder = async () => {
     const name = state.remoteConnection.profileName
