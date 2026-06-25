@@ -80,6 +80,14 @@ def connect(
         connect_kwargs["password"] = password
 
     client.connect(**connect_kwargs)
+
+    # 고지연(WAN) 링크에서 SFTP 처리량을 높이기 위해 채널 윈도우를 키운다.
+    # paramiko 기본 2MB → 8MB (이후 open_sftp로 여는 채널이 이 값을 상속).
+    # 더 많은 데이터를 in-flight로 두어 대역폭-지연 곱이 큰 링크를 잘 채운다.
+    transport = client.get_transport()
+    if transport is not None:
+        transport.default_window_size = 8 * 1024 * 1024
+
     return client
 
 
