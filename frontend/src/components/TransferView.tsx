@@ -57,6 +57,10 @@ export function TransferView() {
   const [selectedBProfile, setSelectedBProfile] = useState('')
   const [bConnecting, setBConnecting] = useState(false)
 
+  // 주 원격(소스/대상) 인라인 연결 — 전송 탭을 떠나지 않고 연결
+  const [selectedAProfile, setSelectedAProfile] = useState('')
+  const [aConnecting, setAConnecting] = useState(false)
+
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
   }
@@ -72,9 +76,39 @@ export function TransferView() {
       .then(r => {
         setBProfiles(r.profiles)
         if (r.profiles.length && !selectedBProfile) setSelectedBProfile(r.profiles[0].name)
+        if (r.profiles.length && !selectedAProfile) setSelectedAProfile(r.profiles[0].name)
       })
       .catch(() => { /* 무시 */ })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 주 원격을 프로파일로 연결(인라인). 성공 시 전역 연결 상태 갱신 → 가드 해제.
+  const connectPrimaryRemote = async () => {
+    if (!selectedAProfile) { toast('연결할 프로파일을 선택하세요.'); return }
+    setAConnecting(true)
+    try {
+      const res = await api.remoteConnect({ mode: 'profile', profileName: selectedAProfile })
+      if (res.ok) {
+        dispatch({
+          type: 'SET_REMOTE_CONNECTION',
+          payload: {
+            connected: true, host: res.host, username: res.username, homeDir: res.homeDir,
+            defaultPath: res.defaultPath ?? null, profileName: res.profileName ?? null,
+          },
+        })
+        toast(`${res.username}@${res.host} 연결됨`, 'success')
+      } else {
+        toast(res.error)
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '원격 연결 실패')
+    } finally {
+      setAConnecting(false)
+    }
+  }
+
+  const swapDirection = () => {
+    setDirection(d => (d === 's3-to-remote' ? 'remote-to-s3' : d === 'remote-to-s3' ? 's3-to-remote' : d))
+  }
 
   // 목적지(기본 원격) 경로 기본값 = 홈/선택 폴더
   useEffect(() => {
@@ -182,20 +216,39 @@ export function TransferView() {
           <ArrowLeftRight size={28} className="mx-auto text-zinc-600 mb-3" />
           <p className="text-sm text-zinc-300 mb-1">전송하려면 연결이 필요합니다</p>
           <p className="text-xs text-zinc-500 mb-4">미연결: <span className="text-zinc-300">{missing.join(', ')}</span></p>
-          <div className="flex gap-2 justify-center">
+          <div className="space-y-2">
             {needsS3 && !s3Connected && (
               <button onClick={() => dispatch({ type: 'SET_MODE', payload: 's3' })}
-                className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs text-zinc-200">
-                <Cloud size={13} /> S3 연결하기
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs text-zinc-200 transition-colors">
+                <Cloud size={13} /> S3 연결하기 →
               </button>
             )}
             {!remoteConnected && (
-              <button onClick={() => dispatch({ type: 'SET_MODE', payload: 'remote' })}
-                className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs text-zinc-200">
-                <Server size={13} /> 원격 연결하기
-              </button>
+              bProfiles.length > 0 ? (
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <select value={selectedAProfile} onChange={e => setSelectedAProfile(e.target.value)}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-8 py-2 text-xs text-zinc-200 appearance-none focus:outline-none focus:border-blue-500">
+                      {bProfiles.map(p => (
+                        <option key={p.name} value={p.name}>{p.name} ({p.username}@{p.host})</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                  </div>
+                  <button onClick={connectPrimaryRemote} disabled={aConnecting || !selectedAProfile}
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-xs font-medium px-3 rounded-lg transition-[background-color,scale] duration-150 active:scale-[0.96]">
+                    <Wifi size={13} /> {aConnecting ? '연결 중' : '원격 연결'}
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => dispatch({ type: 'SET_MODE', payload: 'remote' })}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs text-zinc-200 transition-colors">
+                  <Server size={13} /> 원격 탭에서 연결 →
+                </button>
+              )
             )}
           </div>
+          <p className="text-[11px] text-zinc-600 mt-2">저장된 프로파일로 여기서 바로 연결할 수 있습니다.</p>
           <div className="mt-4">
             <DirectionPicker direction={direction} onChange={setDirection} />
           </div>
@@ -269,6 +322,14 @@ export function TransferView() {
           <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-800 shrink-0">
             <span className="text-xs text-zinc-500">방향</span>
             <DirectionPicker direction={direction} onChange={setDirection} />
+            <button
+              onClick={swapDirection}
+              disabled={direction === 'remote-to-remote'}
+              title={direction === 'remote-to-remote' ? '원격→원격은 스왑 미지원' : '방향 바꾸기 (S3 ↔ 원격)'}
+              className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-100 disabled:text-zinc-700 disabled:hover:bg-transparent px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
+            >
+              <ArrowLeftRight size={13} /> 스왑
+            </button>
           </div>
 
           <div className="flex flex-1 min-h-0">

@@ -33,6 +33,9 @@ PROGRESS_THROTTLE_SEC = 0.2
 # 이력 최대 보관 수
 MAX_JOB_HISTORY = 100
 
+# 잡당 실패 항목 보관 최대 수 (상세 보기용)
+MAX_FAILED_ITEMS = 100
+
 # 완료 알림 최소 소요 시간(초) — 이보다 짧은 성공 잡은 알림 생략(실패는 항상 알림)
 NOTIFY_MIN_SEC = 3.0
 
@@ -80,6 +83,8 @@ class JobState:
     finished_at: datetime | None = None
     error: str | None = None
     current_file: str = ""
+    # 실패한 파일 목록(상세 보기용, 최대 MAX_FAILED_ITEMS개)
+    failed_items: list[dict[str, str]] = field(default_factory=list)
 
     # WebSocket 구독자 큐 목록 (asyncio.Queue)
     _queues: list[asyncio.Queue] = field(default_factory=list, repr=False)
@@ -107,6 +112,7 @@ class JobState:
             "startedAt": self.started_at.isoformat() if self.started_at else None,
             "finishedAt": self.finished_at.isoformat() if self.finished_at else None,
             "error": self.error,
+            "failedItems": self.failed_items,
         }
 
     @classmethod
@@ -126,6 +132,7 @@ class JobState:
         job.started_at = _dt(d.get("startedAt"))
         job.finished_at = _dt(d.get("finishedAt"))
         job.error = d.get("error")
+        job.failed_items = d.get("failedItems", []) or []
         return job
 
 
@@ -305,6 +312,8 @@ class JobManager:
                     job.completed_files += 1
                 else:
                     job.failed_files += 1
+                    if len(job.failed_items) < MAX_FAILED_ITEMS:
+                        job.failed_items.append({"key": key, "error": error_msg or "실패"})
             job.current_file = key
             self._push_event(
                 job,

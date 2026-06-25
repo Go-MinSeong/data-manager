@@ -44,6 +44,7 @@ export interface Job {
   startedAt: string | null
   finishedAt: string | null
   error: string | null
+  failedItems?: { key: string; error: string }[]
 }
 
 // WebSocket 이벤트
