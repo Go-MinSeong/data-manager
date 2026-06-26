@@ -36,9 +36,11 @@ interface TreeSidebarProps {
   onNodeSelect?: (bucket: string, prefix: string, isFolder: boolean) => void
   /** 우클릭 "업로드 위치로 설정" — 버킷+prefix를 업로드 대상으로 지정 */
   onSetUploadDest?: (bucket: string, prefix: string) => void
+  /** 업로드 패널에서 새 폴더를 만들면 해당 prefix를 새로고침하라는 신호(nonce). */
+  refreshSignal?: { bucket: string; prefix: string; nonce: number }
 }
 
-export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetUploadDest }: TreeSidebarProps) {
+export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetUploadDest, refreshSignal }: TreeSidebarProps) {
   const { state, dispatch } = useAppStore()
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   const [preview, setPreview] = useState<{ src: string; title: string } | null>(null)
@@ -153,6 +155,22 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
       })
     }
   }, [loading])
+
+  // 업로드 패널에서 새 폴더 생성 → 해당 prefix 캐시 무효화 후, 펼쳐져 있으면 다시 로드
+  useEffect(() => {
+    if (!refreshSignal || refreshSignal.nonce <= 0) return
+    const { bucket, prefix } = refreshSignal
+    const childKey = `${bucket}::${prefix}`
+    setChildren(prev => {
+      const next = new Map(prev)
+      next.delete(childKey)
+      return next
+    })
+    const expandKey = prefix ? `folder::${prefix}` : `bucket::${bucket}`
+    if (expanded.has(expandKey)) {
+      void loadObjects(bucket, prefix)
+    }
+  }, [refreshSignal?.nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleBucket = async (bucket: string) => {
     dispatch({ type: 'SET_BUCKET', payload: bucket })

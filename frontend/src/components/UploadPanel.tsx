@@ -11,9 +11,11 @@ interface UploadPanelProps {
   preset?: { prefix: string; nonce: number }
   /** 드래그-드롭으로 들어온 파일 경로(nonce 변할 때 추가). */
   filesPreset?: { paths: string[]; nonce: number }
+  /** 새 폴더 생성 성공 시 호출 — 트리에서 해당 prefix를 새로고침한다. */
+  onFolderCreated?: (bucket: string, prefix: string) => void
 }
 
-export function UploadPanel({ preset, filesPreset }: UploadPanelProps) {
+export function UploadPanel({ preset, filesPreset, onFolderCreated }: UploadPanelProps) {
   const { state, dispatch } = useAppStore()
   const [prefix, setPrefix] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
@@ -72,6 +74,7 @@ export function UploadPanel({ preset, filesPreset }: UploadPanelProps) {
       setPrefix(key)
       setFolderName('')
       setShowNewFolder(false)
+      onFolderCreated?.(state.selectedBucket, base)
       toast(`폴더를 생성했습니다: ${key}`, 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : '폴더 생성 실패')
