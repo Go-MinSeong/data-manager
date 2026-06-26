@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   ChevronRight,
   ChevronDown,
@@ -73,6 +73,20 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
   const [hiddenBuckets, setHiddenBuckets] = useState<Set<string>>(new Set())
   const [showHidden, setShowHidden] = useState(false)
   const [filter, setFilter] = useState('')
+  const filterRef = useRef<HTMLInputElement>(null)
+
+  // Cmd+K(⌘K)로 버킷 검색 입력에 포커스
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        filterRef.current?.focus()
+        filterRef.current?.select()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({
@@ -349,9 +363,10 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
           <div className="relative">
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-600" />
             <input
+              ref={filterRef}
               value={filter}
               onChange={e => setFilter(e.target.value)}
-              placeholder="버킷 검색..."
+              placeholder="버킷 검색... (⌘K)"
               className="w-full bg-zinc-900 border border-zinc-800 rounded pl-7 pr-6 py-1 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
             />
             {filter && (
