@@ -280,7 +280,12 @@ export function RemoteConnectPanel() {
         {mode === 'profile' && (
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-zinc-400 mb-1 block">프로파일</label>
+              <label className="text-xs text-zinc-400 mb-1 flex items-center gap-1.5">
+                프로파일
+                {checking && (
+                  <RefreshCw size={11} className="animate-spin text-zinc-500" />
+                )}
+              </label>
               <div className="relative">
                 <select
                   value={selectedProfile}
