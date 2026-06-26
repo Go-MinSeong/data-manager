@@ -138,7 +138,7 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
           </div>
           {checkedKeys.size === 0 ? (
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-zinc-600">왼쪽 트리에서 파일/폴더를 선택하세요</p>
+              <p className="text-xs text-amber-400/80">← 왼쪽 트리에서 파일/폴더를 선택하세요</p>
               {lastSent.size > 0 && onCheckedChange && (
                 <button
                   onClick={() => onCheckedChange(new Set(lastSent))}

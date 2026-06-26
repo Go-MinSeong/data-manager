@@ -211,7 +211,7 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
           </div>
           {checkedKeys.size === 0 ? (
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-zinc-600">왼쪽 트리에서 선택하거나 위에 경로를 입력하세요</p>
+              <p className="text-xs text-amber-400/80">← 왼쪽 트리에서 선택하거나 위에 경로를 입력하세요</p>
               {lastSent.size > 0 && onCheckedChange && (
                 <button
                   onClick={() => onCheckedChange(new Set(lastSent))}
