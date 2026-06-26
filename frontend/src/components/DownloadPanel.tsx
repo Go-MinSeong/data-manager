@@ -25,6 +25,7 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
   const jobId = state.activeJobs['download'] ?? null
   const setJobId = (id: string | null) =>
     dispatch({ type: 'SET_ACTIVE_JOB', payload: { key: 'download', id } })
+  const [lastSent, setLastSent] = useState<Set<string>>(new Set())
   const [preview, setPreview] = useState<{ totalFiles: number; totalBytes: number } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [freeSpace, setFreeSpace] = useState<number | null>(null)
@@ -152,6 +153,7 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
         maxWorkers,
       })
       setJobId(res.jobId)
+      setLastSent(new Set(checkedKeys))
       toast('다운로드를 시작했습니다.', 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : '다운로드 시작 실패')
@@ -207,7 +209,18 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
             </button>
           </div>
           {checkedKeys.size === 0 ? (
-            <p className="text-xs text-zinc-600">왼쪽 트리에서 선택하거나 위에 경로를 입력하세요</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-zinc-600">왼쪽 트리에서 선택하거나 위에 경로를 입력하세요</p>
+              {lastSent.size > 0 && onCheckedChange && (
+                <button
+                  onClick={() => onCheckedChange(new Set(lastSent))}
+                  title={`${lastSent.size}개 항목 복원`}
+                  className="text-xs text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                >
+                  이전 항목 다시 전송 ({lastSent.size})
+                </button>
+              )}
+            </div>
           ) : (
             <div className="space-y-0.5 max-h-40 overflow-y-auto">
               {[...checkedKeys].map(k => (
