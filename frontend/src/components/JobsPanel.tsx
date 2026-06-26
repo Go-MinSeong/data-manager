@@ -149,7 +149,30 @@ export function JobsPanel() {
       {jobs.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-40 text-zinc-600 text-xs gap-2">
           <Clock size={20} />
-          {loading ? '로드 중...' : '작업 이력이 없습니다'}
+          {loading ? (
+            '로드 중...'
+          ) : (
+            <>
+              <p>아직 작업 이력이 없습니다.</p>
+              <p className="text-zinc-500">전송을 시작하면 여기에 표시됩니다.</p>
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  onClick={() => dispatch({ type: 'SET_TAB', payload: 'download' })}
+                  className="flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100 transition-colors px-2 py-1 rounded hover:bg-zinc-800"
+                >
+                  <Download size={13} />
+                  다운로드
+                </button>
+                <button
+                  onClick={() => dispatch({ type: 'SET_TAB', payload: 'upload' })}
+                  className="flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100 transition-colors px-2 py-1 rounded hover:bg-zinc-800"
+                >
+                  <Upload size={13} />
+                  업로드
+                </button>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-2">

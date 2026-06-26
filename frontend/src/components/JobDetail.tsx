@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
-import { X, FolderOpen as FolderOpenIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X, FolderOpen as FolderOpenIcon, Copy, Check } from 'lucide-react'
 import { formatBytes } from './ProgressBar'
+import { copyText } from '../lib/clipboard'
 import type { Job } from '../types'
 
 interface JobDetailProps {
@@ -36,6 +37,14 @@ export function JobDetail({ job, kindLabel, statusLabel, statusColor, onClose, o
   }, [onClose])
 
   const took = elapsed(job.startedAt, job.finishedAt)
+  const [copied, setCopied] = useState(false)
+  const copyJobId = async () => {
+    const ok = await copyText(job.jobId)
+    if (ok) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
+  }
   const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div className="flex items-baseline justify-between gap-3 py-1">
       <span className="text-xs text-zinc-500 shrink-0">{label}</span>
@@ -66,7 +75,19 @@ export function JobDetail({ job, kindLabel, statusLabel, statusColor, onClose, o
           <Row label="시작">{fmt(job.startedAt)}</Row>
           <Row label="종료">{fmt(job.finishedAt)}</Row>
           {took && <Row label="소요">{took}</Row>}
-          <Row label="작업 ID"><span className="font-mono text-[11px] text-zinc-400">{job.jobId}</span></Row>
+          <div className="flex items-center justify-between gap-3 py-1">
+            <span className="text-xs text-zinc-500 shrink-0">작업 ID</span>
+            <button
+              onClick={copyJobId}
+              title="작업 ID 복사"
+              className="flex items-center gap-1 text-zinc-400 hover:text-zinc-200 min-w-0"
+            >
+              {copied
+                ? <Check size={12} className="shrink-0 text-green-400" />
+                : <Copy size={12} className="shrink-0" />}
+              <span className="font-mono text-[11px] truncate tabular-nums">{job.jobId}</span>
+            </button>
+          </div>
           {job.localDir && (
             <div className="flex items-center justify-between gap-3 py-1.5">
               <span className="text-xs text-zinc-500 shrink-0">로컬 경로</span>

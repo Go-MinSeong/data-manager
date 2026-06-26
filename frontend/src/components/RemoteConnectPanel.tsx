@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { KeyboardEvent } from 'react'
 import { KeyRound, Server, Plus, Trash2, ChevronDown, Wifi, RefreshCw } from 'lucide-react'
 import * as api from '../lib/api'
 import type { ProfileHealth } from '../lib/api'
@@ -162,7 +163,9 @@ export function RemoteConnectPanel() {
   }
 
   // adhoc / save 가 공유하는 입력 폼
-  const renderFields = (withName: boolean) => (
+  const renderFields = (withName: boolean, onSubmit: () => void) => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') onSubmit() }
+    return (
     <div className="space-y-3">
       {withName && (
         <div>
@@ -170,6 +173,7 @@ export function RemoteConnectPanel() {
           <input
             value={saveName}
             onChange={e => setSaveName(e.target.value)}
+            onKeyDown={onKey}
             placeholder="my-server"
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500"
           />
@@ -181,6 +185,7 @@ export function RemoteConnectPanel() {
           <input
             value={host}
             onChange={e => setHost(e.target.value)}
+            onKeyDown={onKey}
             placeholder="example.com"
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
           />
@@ -191,6 +196,7 @@ export function RemoteConnectPanel() {
             type="number"
             value={port}
             onChange={e => setPort(Number(e.target.value) || 22)}
+            onKeyDown={onKey}
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -200,6 +206,7 @@ export function RemoteConnectPanel() {
         <input
           value={username}
           onChange={e => setUsername(e.target.value)}
+          onKeyDown={onKey}
           placeholder="ubuntu"
           className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
         />
@@ -226,6 +233,7 @@ export function RemoteConnectPanel() {
           <input
             value={keyPath}
             onChange={e => setKeyPath(e.target.value)}
+            onKeyDown={onKey}
             placeholder="~/.ssh/id_ed25519 (비우면 기본 키·ssh-agent 사용)"
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
           />
@@ -239,12 +247,14 @@ export function RemoteConnectPanel() {
           type="password"
           value={secret}
           onChange={e => setSecret(e.target.value)}
+          onKeyDown={onKey}
           placeholder="••••••••"
           className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
         />
       </div>
     </div>
-  )
+    )
+  }
 
   return (
     <div className="flex-1 flex items-center justify-center bg-zinc-950">
@@ -270,7 +280,12 @@ export function RemoteConnectPanel() {
         {mode === 'profile' && (
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-zinc-400 mb-1 block">프로파일</label>
+              <label className="text-xs text-zinc-400 mb-1 flex items-center gap-1.5">
+                프로파일
+                {checking && (
+                  <RefreshCw size={11} className="animate-spin text-zinc-500" />
+                )}
+              </label>
               <div className="relative">
                 <select
                   value={selectedProfile}
@@ -341,13 +356,13 @@ export function RemoteConnectPanel() {
           </div>
         )}
 
-        {mode === 'adhoc' && renderFields(false)}
+        {mode === 'adhoc' && renderFields(false, () => void handleConnect())}
         {mode === 'save' && (
           <>
             <p className="text-xs text-zinc-500 mb-3">
               접속 정보를 저장합니다. 비밀(passphrase/비밀번호)은 macOS Keychain에만 보관됩니다.
             </p>
-            {renderFields(true)}
+            {renderFields(true, () => void handleSave())}
           </>
         )}
 

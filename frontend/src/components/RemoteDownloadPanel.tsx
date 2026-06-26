@@ -21,6 +21,7 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
   }
   const [localDir, setLocalDir] = useState('')
   const [maxWorkers, setMaxWorkers] = useState(4)
+  const [lastSent, setLastSent] = useState<Set<string>>(new Set())
   const [measuring, setMeasuring] = useState(false)
   const [speed, setSpeed] = useState<{ up: number; down: number } | null>(null)
   const jobId = state.activeJobs['remote-download'] ?? null
@@ -102,6 +103,7 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
         maxWorkers,
       })
       setJobId(res.jobId)
+      setLastSent(new Set(checkedKeys))
       toast('다운로드를 시작했습니다.', 'success')
     } catch (e) {
       if (api.isDisconnectError(e)) {
@@ -127,14 +129,26 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
             {checkedKeys.size > 0 && onCheckedChange && (
               <button
                 onClick={() => onCheckedChange(new Set())}
-                className="text-xs text-zinc-500 hover:text-red-400 transition-colors"
+                className="flex items-center gap-1 px-1.5 py-0.5 -my-0.5 rounded text-xs text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
               >
+                <X size={11} />
                 전체 해제
               </button>
             )}
           </div>
           {checkedKeys.size === 0 ? (
-            <p className="text-xs text-zinc-600">왼쪽 트리에서 파일/폴더를 선택하세요</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-amber-400/80">← 왼쪽 트리에서 파일/폴더를 선택하세요</p>
+              {lastSent.size > 0 && onCheckedChange && (
+                <button
+                  onClick={() => onCheckedChange(new Set(lastSent))}
+                  title={`${lastSent.size}개 항목 복원`}
+                  className="text-xs text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                >
+                  이전 항목 다시 전송 ({lastSent.size})
+                </button>
+              )}
+            </div>
           ) : (
             <div className="space-y-0.5 max-h-40 overflow-y-auto">
               {[...checkedKeys].map(k => (

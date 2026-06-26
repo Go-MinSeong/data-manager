@@ -24,6 +24,12 @@ function AppInner() {
   const [s3UploadPreset, setS3UploadPreset] = useState({ prefix: '', nonce: 0 })
   const [remoteUploadPreset, setRemoteUploadPreset] = useState({ dir: '', nonce: 0 })
 
+  // 업로드 패널에서 새 폴더 생성 → 트리의 해당 prefix 캐시 무효화 후 새로고침(nonce로 트리거)
+  const [s3FolderCreated, setS3FolderCreated] = useState({ bucket: '', prefix: '', nonce: 0 })
+  const handleS3FolderCreated = useCallback((bucket: string, prefix: string) => {
+    setS3FolderCreated(p => ({ bucket, prefix, nonce: p.nonce + 1 }))
+  }, [])
+
   const handleSetS3Upload = useCallback((bucket: string, prefix: string) => {
     dispatch({ type: 'SET_BUCKET', payload: bucket })
     setS3UploadPreset(p => ({ prefix, nonce: p.nonce + 1 }))
@@ -134,6 +140,7 @@ function AppInner() {
                     checkedKeys={checkedKeys}
                     onCheckedChange={setCheckedKeys}
                     onSetUploadDest={handleSetS3Upload}
+                    refreshSignal={s3FolderCreated}
                   />
                 ) : (
                   <RemoteTreeSidebar
@@ -157,6 +164,7 @@ function AppInner() {
                   onCheckedChange={setCheckedKeys}
                   uploadPreset={s3UploadPreset}
                   uploadFilesPreset={s3UploadFiles}
+                  onFolderCreated={handleS3FolderCreated}
                 />
               ) : (
                 <RemoteMainPanel

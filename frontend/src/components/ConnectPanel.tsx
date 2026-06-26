@@ -176,6 +176,7 @@ export function ConnectPanel() {
               <input
                 value={profileRegion}
                 onChange={e => setProfileRegion(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && selectedProfile) void handleConnect() }}
                 placeholder="ap-northeast-2"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500"
               />
@@ -209,6 +210,7 @@ export function ConnectPanel() {
               <input
                 value={accessKeyId}
                 onChange={e => setAccessKeyId(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') void handleConnect() }}
                 placeholder="AKIAIOSFODNN7EXAMPLE"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
               />
@@ -219,6 +221,7 @@ export function ConnectPanel() {
                 type="password"
                 value={secretAccessKey}
                 onChange={e => setSecretAccessKey(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') void handleConnect() }}
                 placeholder="••••••••••••••••••••"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
               />
@@ -243,6 +246,7 @@ export function ConnectPanel() {
               <input
                 value={saveName}
                 onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
                 placeholder="my-profile"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500"
               />
@@ -252,6 +256,7 @@ export function ConnectPanel() {
               <input
                 value={saveAccessKey}
                 onChange={e => setSaveAccessKey(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
                 placeholder="AKIAIOSFODNN7EXAMPLE"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
               />
@@ -262,6 +267,7 @@ export function ConnectPanel() {
                 type="password"
                 value={saveSecretKey}
                 onChange={e => setSaveSecretKey(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
                 placeholder="••••••••••••••••••••"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
               />
@@ -271,6 +277,7 @@ export function ConnectPanel() {
               <input
                 value={saveRegion}
                 onChange={e => setSaveRegion(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
                 placeholder="ap-northeast-2"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500"
               />
@@ -284,6 +291,7 @@ export function ConnectPanel() {
               <button
                 onClick={handleConnect}
                 disabled={loading || (mode === 'profile' && !selectedProfile)}
+                title={mode === 'profile' && !selectedProfile ? '연결하려면 프로파일을 선택하세요.' : undefined}
                 className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-[background-color,scale] duration-150 active:scale-[0.96]"
               >
                 {loading ? (
@@ -324,6 +332,12 @@ export function ConnectPanel() {
             </>
           )}
         </div>
+
+        {mode === 'profile' && !selectedProfile && (
+          <p className="text-xs text-amber-500/80 text-center mt-2">
+            연결하려면 프로파일을 선택하세요.
+          </p>
+        )}
 
         <p className="text-xs text-zinc-600 text-center mt-3 flex items-center justify-center gap-1">
           <User size={11} />
