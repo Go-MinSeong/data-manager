@@ -355,22 +355,36 @@ export function TransferView() {
 
           <div className="flex flex-1 min-h-0">
             {/* 소스 트리 */}
-            <div className="w-72 shrink-0 h-full min-h-0 border-r border-zinc-800">
-              {srcIsS3 ? (
-                <TreeSidebar checkedKeys={checkedKeys} onCheckedChange={setCheckedKeys} />
-              ) : (
-                <RemoteTreeSidebar
-                  checkedKeys={checkedKeys}
-                  onCheckedChange={setCheckedKeys}
-                  onSelectDir={setSelectedRemoteDir}
-                  selectedDir={selectedRemoteDir}
-                />
-              )}
+            <div className="w-72 shrink-0 h-full min-h-0 border-r border-zinc-800 flex flex-col bg-emerald-500/[0.04]">
+              <div
+                title={`전송할 항목을 고르는 원본입니다 (${srcIsS3 ? 'S3' : '원격 서버'})`}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-emerald-400/90 border-b border-zinc-800 shrink-0"
+              >
+                {srcIsS3 ? <Cloud size={12} /> : <Server size={12} />}
+                <span>원본 (소스)</span>
+                <span className="text-zinc-600">{srcIsS3 ? 'S3' : '원격'}</span>
+              </div>
+              <div className="flex-1 min-h-0">
+                {srcIsS3 ? (
+                  <TreeSidebar checkedKeys={checkedKeys} onCheckedChange={setCheckedKeys} />
+                ) : (
+                  <RemoteTreeSidebar
+                    checkedKeys={checkedKeys}
+                    onCheckedChange={setCheckedKeys}
+                    onSelectDir={setSelectedRemoteDir}
+                    selectedDir={selectedRemoteDir}
+                  />
+                )}
+              </div>
             </div>
 
             {/* 설정 패널 */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-              <h3 className="text-sm font-semibold text-zinc-200">
+            <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-blue-500/[0.03]">
+              <h3
+                title={`${DIRECTIONS.find(d => d.id === direction)?.label} — 왼쪽 원본에서 고른 항목을 아래 대상으로 보냅니다`}
+                className="flex items-center gap-1.5 text-sm font-semibold text-zinc-200"
+              >
+                <span className="text-[11px] font-medium text-blue-400/90">대상 →</span>
                 {DIRECTIONS.find(d => d.id === direction)?.label} 전송
               </h3>
 
