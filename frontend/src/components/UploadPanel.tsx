@@ -200,7 +200,7 @@ export function UploadPanel({ preset, filesPreset, onFolderCreated }: UploadPane
           </div>
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg min-h-16 p-2">
             {localPaths.length === 0 ? (
-              <p className="text-xs text-zinc-600 text-center py-4">파일/폴더를 선택하거나 끌어다 놓으세요</p>
+              <p className="text-xs text-amber-400/80 text-center py-4">파일/폴더를 선택하거나 끌어다 놓으세요</p>
             ) : (
               <div className="space-y-1">
                 {localPaths.map(p => (
