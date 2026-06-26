@@ -291,6 +291,7 @@ export function ConnectPanel() {
               <button
                 onClick={handleConnect}
                 disabled={loading || (mode === 'profile' && !selectedProfile)}
+                title={mode === 'profile' && !selectedProfile ? '연결하려면 프로파일을 선택하세요.' : undefined}
                 className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-[background-color,scale] duration-150 active:scale-[0.96]"
               >
                 {loading ? (
@@ -331,6 +332,12 @@ export function ConnectPanel() {
             </>
           )}
         </div>
+
+        {mode === 'profile' && !selectedProfile && (
+          <p className="text-xs text-amber-500/80 text-center mt-2">
+            연결하려면 프로파일을 선택하세요.
+          </p>
+        )}
 
         <p className="text-xs text-zinc-600 text-center mt-3 flex items-center justify-center gap-1">
           <User size={11} />
