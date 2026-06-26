@@ -175,8 +175,9 @@ export function DownloadPanel({ checkedKeys, onCheckedChange }: DownloadPanelPro
               {checkedKeys.size > 0 && onCheckedChange && (
                 <button
                   onClick={() => onCheckedChange(new Set())}
-                  className="text-xs text-zinc-500 hover:text-red-400 transition-colors"
+                  className="flex items-center gap-1 px-1.5 py-0.5 -my-0.5 rounded text-xs text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 >
+                  <X size={11} />
                   전체 해제
                 </button>
               )}

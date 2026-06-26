@@ -176,13 +176,24 @@ export function UploadPanel({ preset, filesPreset }: UploadPanelProps) {
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-zinc-400">업로드할 파일/폴더</label>
-            <button
-              onClick={handlePickFiles}
-              className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
-            >
-              <FilePlus size={11} />
-              선택
-            </button>
+            <div className="flex items-center gap-2">
+              {localPaths.length > 0 && (
+                <button
+                  onClick={() => setLocalPaths([])}
+                  className="flex items-center gap-1 px-1.5 py-0.5 -my-0.5 rounded text-xs text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  <X size={11} />
+                  전체 해제
+                </button>
+              )}
+              <button
+                onClick={handlePickFiles}
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+              >
+                <FilePlus size={11} />
+                선택
+              </button>
+            </div>
           </div>
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg min-h-16 p-2">
             {localPaths.length === 0 ? (
