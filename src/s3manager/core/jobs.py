@@ -278,15 +278,30 @@ class JobManager:
         if job and queue in job._queues:
             job._queues.remove(queue)
 
+    @staticmethod
+    def _safe_put(q: asyncio.Queue, event: dict) -> None:
+        """이벤트 루프 안에서 실행 — 큐가 가득 차면 가장 오래된 것을 버리고 최신을 넣는다.
+
+        put_nowait 는 call_soon_threadsafe 로 예약되므로 QueueFull 은 루프 콜백
+        안에서 발생한다. 여기서 잡지 않으면 대량 전송(수천 건) 시 느리거나 끊긴
+        구독자의 큐가 가득 차 예외가 폭주하고 이벤트 루프가 마비된다(서버 전체 무응답).
+        """
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()  # drop-oldest — 진행률은 최신 값이 중요
+                q.put_nowait(event)
+            except Exception:
+                pass
+
     def _push_event(self, job: JobState, event: dict) -> None:
         """모든 구독 큐에 이벤트를 push한다. 스레드-세이프."""
         if not self._loop:
             return
         for q in list(job._queues):
             try:
-                self._loop.call_soon_threadsafe(q.put_nowait, event)
-            except asyncio.QueueFull:
-                logger.warning("잡 이벤트 큐 가득 참 (job_id=%s)", job.job_id)
+                self._loop.call_soon_threadsafe(self._safe_put, q, event)
             except Exception as exc:
                 logger.debug("이벤트 push 실패: %s", exc)
 
