@@ -12,6 +12,7 @@ from typing import Any, Protocol, Union
 
 import boto3
 import paramiko
+from botocore.config import Config as BotoConfig
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -435,7 +436,19 @@ def connect(body: dict) -> JSONResponse:
     region = body.get("region") or boto_session.region_name or settings.DEFAULT_REGION
 
     # S3 클라이언트 생성 (이후 모든 버킷 작업에 사용)
-    s3_client = boto_session.client("s3", region_name=region)
+    #  - max_pool_connections: UI 동시 수(≤16) + 여유. 풀(기본 10) 고갈로 워커가
+    #    커넥션을 기다리다 직렬화·정체되는 것을 방지.
+    #  - retries adaptive: 일시적 오류·throttle 을 백오프+클라이언트 레이트리밋으로 재시도.
+    s3_client = boto_session.client(
+        "s3",
+        region_name=region,
+        config=BotoConfig(
+            max_pool_connections=32,
+            retries={"max_attempts": 5, "mode": "adaptive"},
+            connect_timeout=15,
+            read_timeout=60,
+        ),
+    )
     _session.connect(
         session=boto_session,
         client=s3_client,
