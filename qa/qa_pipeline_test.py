@@ -65,8 +65,8 @@ async def main():
           "| completed:", job.completed_files, "| failed:", job.failed_files)
 
     # 검증 — start는 WS 연결 시 스냅샷(job.to_dict)이 흡수하므로
-    # 구독 타이밍에 따라 누락될 수 있음(계약 §3 설계). progress/file/done 흐름과 종료를 본다.
-    assert "file" in types, "file 이벤트 없음"
+    # 구독 타이밍에 따라 누락될 수 있음(계약 §3 설계). progress/done 흐름과 종료를 본다.
+    # (파일별 'file' 이벤트는 대량 작업 루프 마비 방지를 위해 제거됨 — 진행률은 throttled progress로만.)
     assert "progress" in types, "progress 이벤트 없음(throttle 동작 확인)"
     assert types[-1] == "done", f"마지막 이벤트가 done이 아님: {types}"
     assert job.status == "done"

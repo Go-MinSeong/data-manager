@@ -312,24 +312,27 @@ class JobManager:
     def _make_callbacks(self, job: JobState):
         """잡에 연결된 on_bytes / on_file 콜백을 반환한다."""
 
-        def on_bytes(n: int) -> None:
-            with job._counter_lock:
-                job.transferred_bytes += n
+        def _emit_progress_throttled() -> None:
+            """throttled progress 이벤트 발행. on_bytes/on_file 이 공유해 호출한다.
+
+            대량 작업(수천 파일)에서 파일마다 이벤트를 push 하면 call_soon_threadsafe
+            콜백이 이벤트 루프에 폭주해 루프가 마비되고 HTTP(연결/health)를 못 받는다.
+            그래서 파일별 이벤트는 없애고, 진행률만 PROGRESS_THROTTLE_SEC 주기로 병합해 보낸다.
+            """
             now = time.monotonic()
             if now - job._last_progress_ts < PROGRESS_THROTTLE_SEC:
                 return
             job._last_progress_ts = now
-
             elapsed = now - job._transfer_start if job._transfer_start else 1e-9
             speed = job.transferred_bytes / elapsed if elapsed > 0 else 0
             remaining = job.total_bytes - job.transferred_bytes
             eta = int(remaining / speed) if speed > 0 else None
-
             self._push_event(
                 job,
                 {
                     "type": "progress",
                     "completedFiles": job.completed_files,
+                    "failedFiles": job.failed_files,
                     "totalFiles": job.total_files,
                     "transferredBytes": job.transferred_bytes,
                     "totalBytes": job.total_bytes,
@@ -338,6 +341,11 @@ class JobManager:
                     "etaSec": eta,
                 },
             )
+
+        def on_bytes(n: int) -> None:
+            with job._counter_lock:
+                job.transferred_bytes += n
+            _emit_progress_throttled()
 
         def on_file(key: str, success: bool, error_msg: str | None) -> None:
             with job._counter_lock:
@@ -348,15 +356,10 @@ class JobManager:
                     if len(job.failed_items) < MAX_FAILED_ITEMS:
                         job.failed_items.append({"key": key, "error": error_msg or "실패"})
             job.current_file = key
-            self._push_event(
-                job,
-                {
-                    "type": "file",
-                    "key": key,
-                    "status": "done" if success else "failed",
-                    "error": error_msg,
-                },
-            )
+            # 파일별 이벤트는 프론트가 소비하지 않고 루프만 마비시키므로 발행하지 않는다.
+            # 실패/완료 카운트가 오를 때도 진행률이 갱신되도록 throttled progress 만 보낸다
+            # (실패는 바이트가 안 늘어 on_bytes 가 안 불릴 수 있으므로 여기서도 호출).
+            _emit_progress_throttled()
 
         return on_bytes, on_file
 
