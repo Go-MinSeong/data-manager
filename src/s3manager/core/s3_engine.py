@@ -18,6 +18,23 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
+# 진단: 다운로드/업로드 예외의 전체 트레이스백을 프로세스당 최대 몇 건만 WARNING으로 남긴다.
+# per-file 로그는 대량 작업 시 범람하므로 debug로 낮췄지만, 원인 파악을 위해 처음 몇 건은
+# 스택까지 보이게 한다(상한이 있어 범람하지 않음).
+_DIAG_TRACE_MAX = 3
+_diag_trace_count = 0
+_diag_lock = threading.Lock()
+
+
+def _diag_trace(msg: str, key: str, exc: Exception) -> None:
+    global _diag_trace_count
+    with _diag_lock:
+        if _diag_trace_count >= _DIAG_TRACE_MAX:
+            return
+        _diag_trace_count += 1
+    logger.warning("%s (%s): %s", msg, key, exc, exc_info=True)
+
+
 # 콜백 타입 정의
 BytesCallback = Callable[[int], None]          # 전송된 바이트 증분 콜백
 FileCallback = Callable[[str, bool, str | None], None]  # (key, success, error_msg)
@@ -185,9 +202,11 @@ def download_single(
         # per-file — debug 유지(대량 작업 시 수천 건이면 로그 스트림 락에서 서버가 정체됨).
         # 실패는 on_file 콜백으로 UI(실패 목록)에 보고된다.
         logger.debug("다운로드 실패 (%s): %s", key, exc)
+        _diag_trace("다운로드 실패", key, exc)
         return False
     except Exception as exc:
         logger.debug("다운로드 중 예외 (%s): %s", key, exc)
+        _diag_trace("다운로드 중 예외", key, exc)
         return False
 
 

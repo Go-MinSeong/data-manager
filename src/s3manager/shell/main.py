@@ -17,8 +17,10 @@ macOS 제약:
 
 from __future__ import annotations
 
+import faulthandler
 import logging
 import secrets
+import signal
 import sys
 import threading
 import time
@@ -28,6 +30,16 @@ import urllib.error
 import uvicorn
 
 from s3manager import settings
+
+
+# 진단: SIGUSR1 을 받으면 모든 스레드의 파이썬 스택을 stderr(로그 파일)로 덤프한다.
+# 데드락/행 상태에서도 동작한다(C 시그널 핸들러가 fd에 직접 write — 락·버퍼 우회).
+# 사용: kill -USR1 <pid>  → ~/Library/Logs/DataManager.log 에 스택이 찍힌다.
+faulthandler.enable()
+try:
+    faulthandler.register(signal.SIGUSR1, all_threads=True, chain=False)
+except Exception:
+    pass
 
 
 # ------------------------------------------------------------------ #
