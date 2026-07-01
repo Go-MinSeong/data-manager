@@ -196,12 +196,12 @@ def _run(
                 if ok:
                     return label, True, None
                 direct_off.set()
-                logger.warning("직통 실패(%s) → 이후 릴레이 전환: %s", label, err)
+                logger.info("직통 실패(%s) → 이후 릴레이 전환: %s", label, err)  # 잡당 1회
             except TransferCanceled:
                 return label, False, "취소됨"
             except Exception as exc:
                 direct_off.set()
-                logger.warning("직통 예외(%s) → 이후 릴레이 전환: %s", label, exc)
+                logger.info("직통 예외(%s) → 이후 릴레이 전환: %s", label, exc)  # 잡당 1회
         # 2) 릴레이 (직통 미사용이거나 직통 실패 시)
         sftp = None
         try:
@@ -211,7 +211,7 @@ def _run(
         except TransferCanceled:
             return label, False, "취소됨"
         except Exception as exc:
-            logger.error("전송 실패(%s): %s", label, exc)
+            logger.debug("전송 실패(%s): %s", label, exc)  # per-file — debug (로그 범람 방지)
             return label, False, str(exc)
         finally:
             if sftp is not None:
@@ -394,7 +394,7 @@ def remote_to_remote(
             except TransferCanceled:
                 return
             except Exception as exc:
-                logger.error("원격→원격 전송 실패(%s): %s", src_path, exc)
+                logger.debug("원격→원격 전송 실패(%s): %s", src_path, exc)  # per-file
                 ok, err = False, str(exc)
             with lock:
                 counts["success" if ok else "failure"] += 1

@@ -367,7 +367,8 @@ def _run_with_channel_pool(
                 except Exception as exc:
                     ok = False
                     err = str(exc)
-                    logger.warning(
+                    # per-file/attempt — debug (대량 작업 시 로그 스트림 락으로 서버 정체 방지)
+                    logger.debug(
                         "전송 실패, 재시도 %d/%d (%s): %s", attempt + 1, RETRIES, key, exc
                     )
                     if attempt < RETRIES - 1:

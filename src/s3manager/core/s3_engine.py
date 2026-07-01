@@ -182,10 +182,12 @@ def download_single(
         logger.debug("다운로드 취소됨 (%s)", key)
         return False
     except ClientError as exc:
-        logger.error("다운로드 실패 (%s): %s", key, exc)
+        # per-file — debug 유지(대량 작업 시 수천 건이면 로그 스트림 락에서 서버가 정체됨).
+        # 실패는 on_file 콜백으로 UI(실패 목록)에 보고된다.
+        logger.debug("다운로드 실패 (%s): %s", key, exc)
         return False
     except Exception as exc:
-        logger.error("다운로드 중 예외 (%s): %s", key, exc)
+        logger.debug("다운로드 중 예외 (%s): %s", key, exc)
         return False
 
 
@@ -260,7 +262,7 @@ def download_objects(
             try:
                 ok = fut.result()
             except Exception as exc:
-                logger.error("다운로드 future 예외 (%s): %s", s3_key, exc)
+                logger.debug("다운로드 future 예외 (%s): %s", s3_key, exc)  # per-file
                 ok = False
 
             if ok:
@@ -321,10 +323,10 @@ def upload_single(
         logger.debug("업로드 취소됨 (%s)", s3_key)
         return False
     except ClientError as exc:
-        logger.error("업로드 실패 (%s): %s", s3_key, exc)
+        logger.debug("업로드 실패 (%s): %s", s3_key, exc)  # per-file — debug (로그 범람 방지)
         return False
     except Exception as exc:
-        logger.error("업로드 중 예외 (%s): %s", s3_key, exc)
+        logger.debug("업로드 중 예외 (%s): %s", s3_key, exc)
         return False
 
 
@@ -381,7 +383,7 @@ def upload_objects(
             try:
                 ok = fut.result()
             except Exception as exc:
-                logger.error("업로드 future 예외 (%s): %s", s3_key, exc)
+                logger.debug("업로드 future 예외 (%s): %s", s3_key, exc)  # per-file
                 ok = False
 
             if ok:
