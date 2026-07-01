@@ -68,6 +68,50 @@ def _wait_for_server(timeout: float = 30.0, interval: float = 0.2) -> bool:
 
 
 # ------------------------------------------------------------------ #
+#  창 드래그 — 네이티브 위임                                            #
+# ------------------------------------------------------------------ #
+
+def _install_native_drag() -> None:
+    """pywebview의 JS 좌표계산 드래그를 macOS 네이티브 드래그로 교체한다.
+
+    기본 구현은 mousemove마다 JS→브릿지→setFrameTopLeftPoint_ 로 창을 옮기는데,
+    좌표 뒤집기가 창 생성 당시의 단일 스크린 기준이라 다른 모니터(원점·높이 상이)로
+    넘어가면 창이 커서를 못 따라오고 끊긴다. AppKit의 performWindowDragWithEvent: 는
+    멀티모니터·배율 차이를 커널이 처리하고 채널 왕복이 없어 부드럽다.
+
+    pywebview의 드래그 영역 감지(.pywebview-drag-region + DIRECT_TARGET_ONLY,
+    버튼 클릭 제외)는 그대로 두고 실제 이동만 위임한다. 인스턴스 move() 는 드래그 시
+    AppHelper.callAfter 로 메인 스레드에서 호출되므로 AppKit 직접 호출이 안전하다.
+    """
+    try:
+        import AppKit
+        from webview.platforms import cocoa
+
+        _LEFT_DOWN = getattr(AppKit, "NSEventTypeLeftMouseDown", 1)
+        _LEFT_DRAG = getattr(AppKit, "NSEventTypeLeftMouseDragged", 6)
+        _dragging = {"on": False}
+
+        def _native_move(self, x, y):  # noqa: ANN001
+            # 드래그 진행 중(모달) 재진입, 드래그 종료 후 큐에 남은 중복 호출은 무시
+            if _dragging["on"]:
+                return
+            win = getattr(self, "window", None)
+            ev = AppKit.NSApplication.sharedApplication().currentEvent()
+            # 마우스 드래그 이벤트일 때만 네이티브 드래그 시작(버튼 뗀 뒤 stray 호출 차단)
+            if win is None or ev is None or ev.type() not in (_LEFT_DOWN, _LEFT_DRAG):
+                return
+            _dragging["on"] = True
+            try:
+                win.performWindowDragWithEvent_(ev)  # mouseUp까지 모달, 네이티브 이동
+            finally:
+                _dragging["on"] = False
+
+        cocoa.BrowserView.move = _native_move
+    except Exception:
+        logging.getLogger(__name__).debug("네이티브 드래그 설치 실패", exc_info=True)
+
+
+# ------------------------------------------------------------------ #
 #  메인 진입점                                                          #
 # ------------------------------------------------------------------ #
 
@@ -103,6 +147,8 @@ def main() -> None:
     # 드래그 영역: 클래스(.pywebview-drag-region)를 "직접" 클릭할 때만 창 이동.
     # 헤더의 빈 영역을 끌면 창이 움직이고, 그 안의 버튼 클릭은 드래그로 새지 않는다.
     webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
+
+    _install_native_drag()
 
     window = webview.create_window(
         title=settings.APP_NAME,
