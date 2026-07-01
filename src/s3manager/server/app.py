@@ -577,8 +577,12 @@ def create_s3_folder(body: S3FolderRequest) -> OkResponse:
 # 전송 작업
 # ---------------------------------------------------------------------------
 
+# 주의: 아래 잡 생성 라우트(start_download/upload/remote_*/transfer_*)는 반드시 sync `def`.
+# submit_* 가 원격/S3 트리를 재귀 열거(flat_summary 등)하며 블로킹하므로, async def 로 두면
+# 그 열거가 이벤트 루프를 통째로 막아 서버 전체가 무응답이 된다(대용량 디렉터리에서 재현).
+# sync def 는 FastAPI 스레드풀에서 실행돼 루프를 막지 않는다. async 로 되돌리지 말 것.
 @app.post("/api/download", response_model=JobIdResponse)
-async def start_download(body: DownloadRequest) -> JobIdResponse:
+def start_download(body: DownloadRequest) -> JobIdResponse:
     """다운로드 잡을 생성한다. prefixes 또는 keys 중 하나 필수."""
     if not body.prefixes and not body.keys:
         raise HTTPException(status_code=422, detail="prefixes 또는 keys 중 하나가 필요합니다.")
@@ -597,7 +601,7 @@ async def start_download(body: DownloadRequest) -> JobIdResponse:
 
 
 @app.post("/api/upload", response_model=JobIdResponse)
-async def start_upload(body: UploadRequest) -> JobIdResponse:
+def start_upload(body: UploadRequest) -> JobIdResponse:
     """업로드 잡을 생성한다."""
     client = _session.require_client()
     job_id = job_manager.submit_upload(
@@ -884,7 +888,7 @@ def create_remote_folder(body: RemoteFolderRequest) -> OkResponse:
 
 
 @app.post("/api/remote/download", response_model=JobIdResponse)
-async def start_remote_download(body: RemoteDownloadRequest) -> JobIdResponse:
+def start_remote_download(body: RemoteDownloadRequest) -> JobIdResponse:
     """원격 → 로컬 다운로드 잡을 생성한다. remoteDirs 또는 keys 중 하나 필수."""
     if not body.remote_dirs and not body.keys:
         raise HTTPException(status_code=422, detail="remoteDirs 또는 keys 중 하나가 필요합니다.")
@@ -901,7 +905,7 @@ async def start_remote_download(body: RemoteDownloadRequest) -> JobIdResponse:
 
 
 @app.post("/api/remote/upload", response_model=JobIdResponse)
-async def start_remote_upload(body: RemoteUploadRequest) -> JobIdResponse:
+def start_remote_upload(body: RemoteUploadRequest) -> JobIdResponse:
     """로컬 → 원격 업로드 잡을 생성한다."""
     ssh = _remote.require_ssh()
     job_id = job_manager.submit_remote_upload(
@@ -918,7 +922,7 @@ async def start_remote_upload(body: RemoteUploadRequest) -> JobIdResponse:
 # ---------------------------------------------------------------------------
 
 @app.post("/api/transfer/s3-to-remote", response_model=JobIdResponse)
-async def start_s3_to_remote(body: S3ToRemoteRequest) -> JobIdResponse:
+def start_s3_to_remote(body: S3ToRemoteRequest) -> JobIdResponse:
     """S3 → 원격 전송 잡을 생성한다. S3·원격 세션 모두 연결 필요."""
     if not body.prefixes and not body.keys:
         raise HTTPException(status_code=422, detail="prefixes 또는 keys 중 하나가 필요합니다.")
@@ -933,7 +937,7 @@ async def start_s3_to_remote(body: S3ToRemoteRequest) -> JobIdResponse:
 
 
 @app.post("/api/transfer/remote-to-s3", response_model=JobIdResponse)
-async def start_remote_to_s3(body: RemoteToS3Request) -> JobIdResponse:
+def start_remote_to_s3(body: RemoteToS3Request) -> JobIdResponse:
     """원격 → S3 전송 잡을 생성한다. S3·원격 세션 모두 연결 필요."""
     if not body.remote_dirs and not body.keys:
         raise HTTPException(status_code=422, detail="remoteDirs 또는 keys 중 하나가 필요합니다.")
@@ -948,7 +952,7 @@ async def start_remote_to_s3(body: RemoteToS3Request) -> JobIdResponse:
 
 
 @app.post("/api/transfer/remote-to-remote", response_model=JobIdResponse)
-async def start_remote_to_remote(body: RemoteToRemoteRequest) -> JobIdResponse:
+def start_remote_to_remote(body: RemoteToRemoteRequest) -> JobIdResponse:
     """원격(소스) → 원격B(대상) 전송. 두 원격 세션 모두 연결 필요(Mac 경유 릴레이)."""
     if not body.src_dirs and not body.src_keys:
         raise HTTPException(status_code=422, detail="srcDirs 또는 srcKeys 중 하나가 필요합니다.")
