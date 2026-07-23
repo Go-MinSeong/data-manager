@@ -124,10 +124,22 @@ fi
 echo ""
 echo "--- [4/4] 서명 + 패키징 ---"
 
-# ad-hoc 서명: 서명 없는 .app은 일부 환경에서 "손상됨"으로 실행이 막힌다.
-# (정식 Developer ID 서명/공증이 아니므로 다운로드본은 여전히 Gatekeeper 경고 → INSTALL.md)
-codesign --force --deep --sign - "dist/Data Manager.app" 2>/dev/null \
-    && echo "ad-hoc 서명 완료" || echo "경고: codesign 실패(서명 없이 진행)"
+# 안정적 자체 서명 아이덴티티가 있으면 그것으로 서명한다(없으면 ad-hoc 폴백).
+# 왜: ad-hoc 서명은 빌드마다 코드 해시가 달라져, 앱이 Keychain에 저장한 원격 비밀번호를
+#     다음 빌드가 못 읽는다(재빌드 후 비밀번호 인증 깨짐). 고정 인증서로 서명하면 코드
+#     아이덴티티가 일정해 Keychain 접근이 유지된다. 인증서 생성: packaging/make-signing-cert.sh
+SIGN_ID="Data Manager Dev"
+if security find-identity -p codesigning 2>/dev/null | grep -q "$SIGN_ID"; then
+    codesign --force --deep --sign "$SIGN_ID" \
+        --identifier io.github.go-minseong.datamanager "dist/Data Manager.app" \
+        && echo "서명 완료(고정 아이덴티티: $SIGN_ID)" || echo "경고: 고정 서명 실패"
+else
+    # ad-hoc 폴백: 서명 없는 .app은 일부 환경에서 "손상됨"으로 실행이 막힌다.
+    echo "고정 서명 아이덴티티 없음 → ad-hoc 서명(재빌드 시 Keychain 접근 깨질 수 있음)."
+    echo "  안정화하려면: bash packaging/make-signing-cert.sh"
+    codesign --force --deep --sign - "dist/Data Manager.app" 2>/dev/null \
+        && echo "ad-hoc 서명 완료" || echo "경고: codesign 실패(서명 없이 진행)"
+fi
 
 # 배포용 zip (ditto로 번들 메타데이터/심볼릭링크 보존)
 ZIP="dist/Data-Manager-${ARCH}.zip"

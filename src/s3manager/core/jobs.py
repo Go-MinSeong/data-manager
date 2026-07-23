@@ -278,15 +278,30 @@ class JobManager:
         if job and queue in job._queues:
             job._queues.remove(queue)
 
+    @staticmethod
+    def _safe_put(q: asyncio.Queue, event: dict) -> None:
+        """이벤트 루프 안에서 실행 — 큐가 가득 차면 가장 오래된 것을 버리고 최신을 넣는다.
+
+        put_nowait 는 call_soon_threadsafe 로 예약되므로 QueueFull 은 루프 콜백
+        안에서 발생한다. 여기서 잡지 않으면 대량 전송(수천 건) 시 느리거나 끊긴
+        구독자의 큐가 가득 차 예외가 폭주하고 이벤트 루프가 마비된다(서버 전체 무응답).
+        """
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()  # drop-oldest — 진행률은 최신 값이 중요
+                q.put_nowait(event)
+            except Exception:
+                pass
+
     def _push_event(self, job: JobState, event: dict) -> None:
         """모든 구독 큐에 이벤트를 push한다. 스레드-세이프."""
         if not self._loop:
             return
         for q in list(job._queues):
             try:
-                self._loop.call_soon_threadsafe(q.put_nowait, event)
-            except asyncio.QueueFull:
-                logger.warning("잡 이벤트 큐 가득 참 (job_id=%s)", job.job_id)
+                self._loop.call_soon_threadsafe(self._safe_put, q, event)
             except Exception as exc:
                 logger.debug("이벤트 push 실패: %s", exc)
 
@@ -297,24 +312,27 @@ class JobManager:
     def _make_callbacks(self, job: JobState):
         """잡에 연결된 on_bytes / on_file 콜백을 반환한다."""
 
-        def on_bytes(n: int) -> None:
-            with job._counter_lock:
-                job.transferred_bytes += n
+        def _emit_progress_throttled() -> None:
+            """throttled progress 이벤트 발행. on_bytes/on_file 이 공유해 호출한다.
+
+            대량 작업(수천 파일)에서 파일마다 이벤트를 push 하면 call_soon_threadsafe
+            콜백이 이벤트 루프에 폭주해 루프가 마비되고 HTTP(연결/health)를 못 받는다.
+            그래서 파일별 이벤트는 없애고, 진행률만 PROGRESS_THROTTLE_SEC 주기로 병합해 보낸다.
+            """
             now = time.monotonic()
             if now - job._last_progress_ts < PROGRESS_THROTTLE_SEC:
                 return
             job._last_progress_ts = now
-
             elapsed = now - job._transfer_start if job._transfer_start else 1e-9
             speed = job.transferred_bytes / elapsed if elapsed > 0 else 0
             remaining = job.total_bytes - job.transferred_bytes
             eta = int(remaining / speed) if speed > 0 else None
-
             self._push_event(
                 job,
                 {
                     "type": "progress",
                     "completedFiles": job.completed_files,
+                    "failedFiles": job.failed_files,
                     "totalFiles": job.total_files,
                     "transferredBytes": job.transferred_bytes,
                     "totalBytes": job.total_bytes,
@@ -323,6 +341,11 @@ class JobManager:
                     "etaSec": eta,
                 },
             )
+
+        def on_bytes(n: int) -> None:
+            with job._counter_lock:
+                job.transferred_bytes += n
+            _emit_progress_throttled()
 
         def on_file(key: str, success: bool, error_msg: str | None) -> None:
             with job._counter_lock:
@@ -333,15 +356,10 @@ class JobManager:
                     if len(job.failed_items) < MAX_FAILED_ITEMS:
                         job.failed_items.append({"key": key, "error": error_msg or "실패"})
             job.current_file = key
-            self._push_event(
-                job,
-                {
-                    "type": "file",
-                    "key": key,
-                    "status": "done" if success else "failed",
-                    "error": error_msg,
-                },
-            )
+            # 파일별 이벤트는 프론트가 소비하지 않고 루프만 마비시키므로 발행하지 않는다.
+            # 실패/완료 카운트가 오를 때도 진행률이 갱신되도록 throttled progress 만 보낸다
+            # (실패는 바이트가 안 늘어 on_bytes 가 안 불릴 수 있으므로 여기서도 호출).
+            _emit_progress_throttled()
 
         return on_bytes, on_file
 

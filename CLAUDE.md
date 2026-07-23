@@ -23,6 +23,8 @@
 ## 빌드·재설치·릴리스
 
 ```bash
+# (최초 1회) 고정 코드서명 인증서 생성 — 재빌드해도 Keychain 접근 유지에 필수
+bash packaging/make-signing-cert.sh
 bash packaging/build.sh          # frontend/dist → PyInstaller → dist/Data Manager.app
 # 재설치(런에이전트 라벨 교체 포함)
 launchctl bootout gui/$(id -u)/<LABEL>; cp -R "dist/Data Manager.app" /Applications/; launchctl bootstrap gui/$(id -u) <plist>
@@ -66,6 +68,7 @@ curl -s 127.0.0.1:8765/api/health # 버전 확인
 - **파일 드래그-드롭**: WKWebView JS는 드롭 파일의 절대경로를 안 준다. pywebview **Python DOM 드롭 핸들러**(`window.dom.document.events.drop`, `DOMEventHandler(prevent_default=True)`)에서 `pywebviewFullPath`를 받아 `evaluate_js`로 프론트에 전달.
 - **Dock/메뉴바**: 메뉴바 NSStatusItem은 노치/혼잡 시 macOS가 화면 밖으로 숨길 수 있다(코드 정상이어도). Dock 아이콘(Regular 활성화 + `LSUIElement=false`)과 `applicationShouldHandleReopen_`(pywebview AppDelegate 상속)으로 **확실한 진입점**을 둔다.
 - **번들 id·Keychain 서비스를 바꾸면 기존 Keychain 비밀이 끊긴다**(재입력 필요). 변경은 신중히.
+- **코드서명은 고정 인증서로**(`packaging/make-signing-cert.sh`의 "Data Manager Dev"). ad-hoc 서명은 빌드마다 코드 해시가 달라져 앱이 저장한 Keychain 비밀(원격 비밀번호)을 다음 빌드가 못 읽는다 → 비밀번호 인증만 깨짐(키 인증은 `~/.ssh` 파일이라 무관). 인증서를 새로 만들면(leaf 해시 변경) 한 번 재입력 필요.
 
 ## 테마 (Tailwind v4)
 

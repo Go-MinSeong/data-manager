@@ -180,22 +180,28 @@ def _run(
     success = 0
     failure = 0
     lock = threading.Lock()
+    # 첫 직통 실패 시 set — 이후 파일은 직통을 건너뛰고 바로 릴레이로 간다.
+    # 원격이 S3에 못 닿는 경우(사전점검은 통과해도 버킷 서브도메인 DNS 실패 등)
+    # 파일마다 curl 을 헛되이 시도하지 않도록 잡당 1회 실패로 학습한다.
+    direct_off = threading.Event()
 
     def worker(item):
         label = item[0]
         if cancel_event and cancel_event.is_set():
             return label, False, "취소됨"
-        # 1) 직통 시도
-        if use_direct:
+        # 1) 직통 시도 (아직 직통이 죽지 않았을 때만)
+        if use_direct and not direct_off.is_set():
             try:
                 ok, err = direct_fn(item)
                 if ok:
                     return label, True, None
-                logger.warning("직통 실패(%s) → 릴레이 폴백: %s", label, err)
+                direct_off.set()
+                logger.info("직통 실패(%s) → 이후 릴레이 전환: %s", label, err)  # 잡당 1회
             except TransferCanceled:
                 return label, False, "취소됨"
             except Exception as exc:
-                logger.warning("직통 예외(%s) → 릴레이 폴백: %s", label, exc)
+                direct_off.set()
+                logger.info("직통 예외(%s) → 이후 릴레이 전환: %s", label, exc)  # 잡당 1회
         # 2) 릴레이 (직통 미사용이거나 직통 실패 시)
         sftp = None
         try:
@@ -205,7 +211,7 @@ def _run(
         except TransferCanceled:
             return label, False, "취소됨"
         except Exception as exc:
-            logger.error("전송 실패(%s): %s", label, exc)
+            logger.debug("전송 실패(%s): %s", label, exc)  # per-file — debug (로그 범람 방지)
             return label, False, str(exc)
         finally:
             if sftp is not None:
@@ -388,7 +394,7 @@ def remote_to_remote(
             except TransferCanceled:
                 return
             except Exception as exc:
-                logger.error("원격→원격 전송 실패(%s): %s", src_path, exc)
+                logger.debug("원격→원격 전송 실패(%s): %s", src_path, exc)  # per-file
                 ok, err = False, str(exc)
             with lock:
                 counts["success" if ok else "failure"] += 1
