@@ -175,6 +175,13 @@ class JobIdResponse(CamelModel):
     job_id: str
 
 
+class FailedItem(CamelModel):
+    """전송 실패한 단일 항목(상세 보기용)."""
+
+    key: str
+    error: str
+
+
 class Job(CamelModel):
     """잡 상태 응답 모델."""
 
@@ -190,6 +197,10 @@ class Job(CamelModel):
     started_at: str | None = None
     finished_at: str | None = None
     error: str | None = None
+    source: str = ""
+    dest: str = ""
+    items: list[str] = []
+    failed_items: list[FailedItem] = []
 
 
 class JobsResponse(CamelModel):

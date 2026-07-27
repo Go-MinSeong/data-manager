@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   ChevronRight,
   ChevronDown,
@@ -80,7 +80,21 @@ export function RemoteTreeSidebar({
   const [rootLoading, setRootLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
+  const filterRef = useRef<HTMLInputElement>(null)
   const [pathInput, setPathInput] = useState('')  // 편집 가능한 루트 경로
+
+  // Cmd+K(⌘K)로 이름 검색 입력에 포커스
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        filterRef.current?.focus()
+        filterRef.current?.select()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
@@ -158,6 +172,7 @@ export function RemoteTreeSidebar({
     }
   }, [])
 
+  // 연결 상태뿐 아니라 연결된 서버(host)·기본폴더가 바뀌면(예: 원격↔원격 스왑) 루트를 다시 로드한다.
   useEffect(() => {
     if (connected) {
       // 프로파일에 저장된 기본 폴더가 있으면 거기서, 없으면 홈에서 시작
@@ -167,7 +182,7 @@ export function RemoteTreeSidebar({
       setChildren(new Map())
       setExpanded(new Set())
     }
-  }, [connected]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connected, state.remoteConnection.host, state.remoteConnection.defaultPath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveDefaultFolder = async () => {
     const name = state.remoteConnection.profileName
@@ -402,9 +417,10 @@ export function RemoteTreeSidebar({
           <div className="relative">
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-600" />
             <input
+              ref={filterRef}
               value={filter}
               onChange={e => setFilter(e.target.value)}
-              placeholder="이름 검색..."
+              placeholder="이름 검색... (⌘K)"
               className="w-full bg-zinc-900 border border-zinc-800 rounded pl-7 pr-6 py-1 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
             />
             {filter && (

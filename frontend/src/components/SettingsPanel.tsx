@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Check, Palette } from 'lucide-react'
 import { THEMES, applyTheme, loadTheme } from '../lib/themes'
+import * as api from '../lib/api'
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -8,6 +9,15 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [current, setCurrent] = useState(loadTheme())
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api.getHealth()
+      .then(r => { if (!cancelled) setVersion(r.version) })
+      .catch(() => { /* 무시 */ })
+    return () => { cancelled = true }
+  }, [])
 
   const pick = (id: string) => {
     applyTheme(id)
@@ -55,6 +65,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               {current === t.id && <Check size={14} className="text-blue-400 shrink-0" />}
             </button>
           ))}
+        </div>
+
+        {/* 버전 */}
+        <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-500">
+          <span>Data Manager</span>
+          <span className="tabular-nums">{version ? `v${version}` : '—'}</span>
         </div>
       </div>
     </div>

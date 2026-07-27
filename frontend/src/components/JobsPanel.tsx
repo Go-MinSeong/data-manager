@@ -14,6 +14,7 @@ import {
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
 import { formatBytes } from './ProgressBar'
+import { JobDetail } from './JobDetail'
 import type { Job } from '../types'
 
 const KIND_LABEL: Record<string, string> = {
@@ -24,6 +25,7 @@ const KIND_LABEL: Record<string, string> = {
   'remote-upload': '원격 업로드',
   's3-to-remote': 'S3→원격',
   'remote-to-s3': '원격→S3',
+  'remote-to-remote': '원격→원격',
 }
 
 const KIND_ICON: Record<string, React.ReactNode> = {
@@ -34,6 +36,7 @@ const KIND_ICON: Record<string, React.ReactNode> = {
   'remote-upload': <Upload size={13} />,
   's3-to-remote': <SyncIcon size={13} />,
   'remote-to-s3': <SyncIcon size={13} />,
+  'remote-to-remote': <SyncIcon size={13} />,
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -75,6 +78,7 @@ export function JobsPanel() {
   const { dispatch } = useAppStore()
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
+  const [detail, setDetail] = useState<Job | null>(null)
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
@@ -145,7 +149,30 @@ export function JobsPanel() {
       {jobs.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-40 text-zinc-600 text-xs gap-2">
           <Clock size={20} />
-          {loading ? '로드 중...' : '작업 이력이 없습니다'}
+          {loading ? (
+            '로드 중...'
+          ) : (
+            <>
+              <p>아직 작업 이력이 없습니다.</p>
+              <p className="text-zinc-500">전송을 시작하면 여기에 표시됩니다.</p>
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  onClick={() => dispatch({ type: 'SET_TAB', payload: 'download' })}
+                  className="flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100 transition-colors px-2 py-1 rounded hover:bg-zinc-800"
+                >
+                  <Download size={13} />
+                  다운로드
+                </button>
+                <button
+                  onClick={() => dispatch({ type: 'SET_TAB', payload: 'upload' })}
+                  className="flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100 transition-colors px-2 py-1 rounded hover:bg-zinc-800"
+                >
+                  <Upload size={13} />
+                  업로드
+                </button>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
@@ -155,7 +182,9 @@ export function JobsPanel() {
             return (
               <div
                 key={job.jobId}
-                className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3"
+                onClick={() => setDetail(job)}
+                title="클릭하여 상세 보기"
+                className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 cursor-pointer hover:border-zinc-600 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
@@ -179,7 +208,7 @@ export function JobsPanel() {
                   <div className="flex items-center gap-2 shrink-0">
                     {(job.status === 'running' || job.status === 'pending') && (
                       <button
-                        onClick={() => handleCancel(job.jobId)}
+                        onClick={e => { e.stopPropagation(); handleCancel(job.jobId) }}
                         title="취소"
                         className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-700 transition-colors"
                       >
@@ -188,7 +217,7 @@ export function JobsPanel() {
                     )}
                     {(job.status === 'done' || job.status === 'error') && (
                       <button
-                        onClick={() => handleReveal(job)}
+                        onClick={e => { e.stopPropagation(); handleReveal(job) }}
                         title="Finder에서 열기"
                         className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 transition-colors"
                       >
@@ -229,6 +258,20 @@ export function JobsPanel() {
           })}
         </div>
       )}
+
+      {detail && (() => {
+        const j = jobs.find(x => x.jobId === detail.jobId) ?? detail
+        return (
+          <JobDetail
+            job={j}
+            kindLabel={KIND_LABEL[j.kind] ?? j.kind}
+            statusLabel={STATUS_LABEL[j.status] ?? j.status}
+            statusColor={STATUS_COLOR[j.status] ?? 'text-zinc-300'}
+            onClose={() => setDetail(null)}
+            onReveal={handleReveal}
+          />
+        )
+      })()}
     </div>
   )
 }

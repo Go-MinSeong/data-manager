@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { KeyRound, Server, Plus, Trash2, ChevronDown, Wifi, RefreshCw } from 'lucide-react'
+import type { KeyboardEvent } from 'react'
+import { KeyRound, Server, Plus, Trash2, Wifi, RefreshCw } from 'lucide-react'
 import * as api from '../lib/api'
 import type { ProfileHealth } from '../lib/api'
 import { useAppStore } from '../store/appStore'
@@ -18,6 +19,7 @@ export function RemoteConnectPanel() {
 
   // profile mode
   const [selectedProfile, setSelectedProfile] = useState('')
+  const [connectingName, setConnectingName] = useState<string | null>(null)
 
   // 공유 입력 필드 (adhoc / save)
   const [host, setHost] = useState('')
@@ -84,16 +86,18 @@ export function RemoteConnectPanel() {
     toast(`${res.username}@${res.host}에 연결되었습니다.`, 'success')
   }
 
-  const handleConnect = async () => {
+  const handleConnect = async (profileNameArg?: string) => {
     setLoading(true)
     try {
       let res
       if (mode === 'profile') {
-        if (!selectedProfile) {
+        const name = profileNameArg ?? selectedProfile
+        if (!name) {
           toast('프로파일을 선택하세요.')
           return
         }
-        res = await api.remoteConnect({ mode: 'profile', profileName: selectedProfile })
+        setConnectingName(name)
+        res = await api.remoteConnect({ mode: 'profile', profileName: name })
       } else {
         if (!host || !username) {
           toast('호스트와 사용자명은 필수입니다.')
@@ -118,6 +122,7 @@ export function RemoteConnectPanel() {
       toast(e instanceof Error ? e.message : '연결 실패')
     } finally {
       setLoading(false)
+      setConnectingName(null)
     }
   }
 
@@ -162,7 +167,9 @@ export function RemoteConnectPanel() {
   }
 
   // adhoc / save 가 공유하는 입력 폼
-  const renderFields = (withName: boolean) => (
+  const renderFields = (withName: boolean, onSubmit: () => void) => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') onSubmit() }
+    return (
     <div className="space-y-3">
       {withName && (
         <div>
@@ -170,6 +177,7 @@ export function RemoteConnectPanel() {
           <input
             value={saveName}
             onChange={e => setSaveName(e.target.value)}
+            onKeyDown={onKey}
             placeholder="my-server"
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-blue-500"
           />
@@ -181,6 +189,7 @@ export function RemoteConnectPanel() {
           <input
             value={host}
             onChange={e => setHost(e.target.value)}
+            onKeyDown={onKey}
             placeholder="example.com"
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
           />
@@ -191,6 +200,7 @@ export function RemoteConnectPanel() {
             type="number"
             value={port}
             onChange={e => setPort(Number(e.target.value) || 22)}
+            onKeyDown={onKey}
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -200,6 +210,7 @@ export function RemoteConnectPanel() {
         <input
           value={username}
           onChange={e => setUsername(e.target.value)}
+          onKeyDown={onKey}
           placeholder="ubuntu"
           className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
         />
@@ -226,6 +237,7 @@ export function RemoteConnectPanel() {
           <input
             value={keyPath}
             onChange={e => setKeyPath(e.target.value)}
+            onKeyDown={onKey}
             placeholder="~/.ssh/id_ed25519 (비우면 기본 키·ssh-agent 사용)"
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
           />
@@ -239,12 +251,14 @@ export function RemoteConnectPanel() {
           type="password"
           value={secret}
           onChange={e => setSecret(e.target.value)}
+          onKeyDown={onKey}
           placeholder="••••••••"
           className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-blue-500"
         />
       </div>
     </div>
-  )
+    )
+  }
 
   return (
     <div className="flex-1 flex items-center justify-center bg-zinc-950">
@@ -269,39 +283,32 @@ export function RemoteConnectPanel() {
 
         {mode === 'profile' && (
           <div className="space-y-3">
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">프로파일</label>
-              <div className="relative">
-                <select
-                  value={selectedProfile}
-                  onChange={e => setSelectedProfile(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 appearance-none pr-8 focus:outline-none focus:border-blue-500"
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-zinc-400 flex items-center gap-1.5">
+                저장된 프로파일
+                {checking && <RefreshCw size={11} className="animate-spin text-zinc-500" />}
+              </label>
+              {profiles.length > 0 && (
+                <button
+                  onClick={() => void loadHealth()}
+                  disabled={checking}
+                  title="연결 가능 여부 다시 점검"
+                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors"
                 >
-                  {profiles.length === 0 && <option value="">프로파일 없음</option>}
-                  {profiles.map(p => (
-                    <option key={p.name} value={p.name}>
-                      {p.name} ({p.username}@{p.host}:{p.port})
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
-              </div>
+                  <RefreshCw size={11} className={checking ? 'animate-spin' : ''} />
+                  점검
+                </button>
+              )}
             </div>
-            {profiles.length > 0 && (
-              <div className="pt-2 border-t border-zinc-800">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-zinc-500">저장된 프로파일</p>
-                  <button
-                    onClick={() => void loadHealth()}
-                    disabled={checking}
-                    title="연결 가능 여부 다시 점검"
-                    className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors"
-                  >
-                    <RefreshCw size={11} className={checking ? 'animate-spin' : ''} />
-                    점검
-                  </button>
-                </div>
-                <div className="space-y-1">
+
+            {profiles.length === 0 ? (
+              <p className="text-xs text-amber-400/80 text-center py-6">
+                저장된 프로파일이 없습니다. 아래 '새 프로파일 저장'으로 추가하세요.
+              </p>
+            ) : (
+              <>
+                <p className="text-[11px] text-zinc-600">프로파일을 클릭하면 바로 연결됩니다.</p>
+                <div className="space-y-1.5">
                   {profiles.map(p => {
                     const h = health[p.name]
                     const dot = !h
@@ -314,49 +321,72 @@ export function RemoteConnectPanel() {
                       : h.reachable
                         ? `연결 가능${h.latencyMs != null ? ` · ${h.latencyMs}ms` : ''}`
                         : '연결 불가 (서버 꺼짐·IP 차단·포트 닫힘)'
+                    const busy = connectingName === p.name
                     return (
-                      <div key={p.name} className="flex items-center justify-between text-xs text-zinc-400">
-                        <span className="truncate flex items-center gap-1.5">
-                          <span
-                            className={`w-2 h-2 rounded-full shrink-0 ${dot}`}
-                            title={dotTitle}
-                          />
-                          {p.name}
-                          <span className="text-zinc-600 ml-0.5">
-                            {p.username}@{p.host} · {p.authType === 'key' ? '🔑' : '••'}
+                      <div
+                        key={p.name}
+                        className="group flex items-center rounded-lg border border-zinc-800 bg-zinc-800/40 hover:bg-zinc-800 hover:border-zinc-700 transition-colors"
+                      >
+                        <button
+                          onClick={() => void handleConnect(p.name)}
+                          disabled={loading}
+                          title="클릭하면 바로 연결"
+                          className="flex-1 flex items-center gap-2 px-3 py-2.5 text-left disabled:opacity-60"
+                        >
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} title={dotTitle} />
+                          <span className="flex-1 min-w-0">
+                            <span className="text-sm text-zinc-200 font-medium">{p.name}</span>
+                            <span className="block text-[11px] text-zinc-500 truncate">
+                              {p.username}@{p.host}:{p.port} · {p.authType === 'key' ? '🔑 키' : '•• 비밀번호'}
+                            </span>
                           </span>
-                        </span>
+                          {busy ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
+                          ) : (
+                            <Wifi size={14} className="text-zinc-600 group-hover:text-blue-400 shrink-0 transition-colors" />
+                          )}
+                        </button>
                         <button
                           onClick={() => handleDelete(p.name)}
-                          className="p-1 hover:text-red-400 transition-colors shrink-0"
+                          disabled={loading}
+                          title="삭제"
+                          className="px-2.5 self-stretch text-zinc-600 hover:text-red-400 transition-colors shrink-0 disabled:opacity-50"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     )
                   })}
                 </div>
-              </div>
+              </>
             )}
           </div>
         )}
 
-        {mode === 'adhoc' && renderFields(false)}
+        {mode === 'adhoc' && renderFields(false, () => void handleConnect())}
         {mode === 'save' && (
           <>
             <p className="text-xs text-zinc-500 mb-3">
               접속 정보를 저장합니다. 비밀(passphrase/비밀번호)은 macOS Keychain에만 보관됩니다.
             </p>
-            {renderFields(true)}
+            {renderFields(true, () => void handleSave())}
           </>
         )}
 
         <div className="mt-5 flex gap-2">
-          {mode !== 'save' ? (
+          {mode === 'profile' ? (
+            <button
+              onClick={() => setMode('save')}
+              className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 text-sm font-medium py-2.5 rounded-lg transition-colors"
+            >
+              <Plus size={15} />
+              새 프로파일 저장
+            </button>
+          ) : mode === 'adhoc' ? (
             <>
               <button
-                onClick={handleConnect}
-                disabled={loading || (mode === 'profile' && !selectedProfile)}
+                onClick={() => void handleConnect()}
+                disabled={loading}
                 className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium py-2.5 rounded-lg transition-[background-color,scale] duration-150 active:scale-[0.96]"
               >
                 {loading ? (

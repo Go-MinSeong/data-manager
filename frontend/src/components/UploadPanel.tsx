@@ -11,9 +11,11 @@ interface UploadPanelProps {
   preset?: { prefix: string; nonce: number }
   /** 드래그-드롭으로 들어온 파일 경로(nonce 변할 때 추가). */
   filesPreset?: { paths: string[]; nonce: number }
+  /** 새 폴더 생성 성공 시 호출 — 트리에서 해당 prefix를 새로고침한다. */
+  onFolderCreated?: (bucket: string, prefix: string) => void
 }
 
-export function UploadPanel({ preset, filesPreset }: UploadPanelProps) {
+export function UploadPanel({ preset, filesPreset, onFolderCreated }: UploadPanelProps) {
   const { state, dispatch } = useAppStore()
   const [prefix, setPrefix] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
@@ -72,6 +74,7 @@ export function UploadPanel({ preset, filesPreset }: UploadPanelProps) {
       setPrefix(key)
       setFolderName('')
       setShowNewFolder(false)
+      onFolderCreated?.(state.selectedBucket, base)
       toast(`폴더를 생성했습니다: ${key}`, 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : '폴더 생성 실패')
@@ -176,17 +179,28 @@ export function UploadPanel({ preset, filesPreset }: UploadPanelProps) {
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-zinc-400">업로드할 파일/폴더</label>
-            <button
-              onClick={handlePickFiles}
-              className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
-            >
-              <FilePlus size={11} />
-              선택
-            </button>
+            <div className="flex items-center gap-2">
+              {localPaths.length > 0 && (
+                <button
+                  onClick={() => setLocalPaths([])}
+                  className="flex items-center gap-1 px-1.5 py-0.5 -my-0.5 rounded text-xs text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  <X size={11} />
+                  전체 해제
+                </button>
+              )}
+              <button
+                onClick={handlePickFiles}
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+              >
+                <FilePlus size={11} />
+                선택
+              </button>
+            </div>
           </div>
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg min-h-16 p-2">
             {localPaths.length === 0 ? (
-              <p className="text-xs text-zinc-600 text-center py-4">파일/폴더를 선택하거나 끌어다 놓으세요</p>
+              <p className="text-xs text-amber-400/80 text-center py-4">파일/폴더를 선택하거나 끌어다 놓으세요</p>
             ) : (
               <div className="space-y-1">
                 {localPaths.map(p => (

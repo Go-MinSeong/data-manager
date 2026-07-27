@@ -33,6 +33,9 @@ PROGRESS_THROTTLE_SEC = 0.2
 # 이력 최대 보관 수
 MAX_JOB_HISTORY = 100
 
+# 잡당 실패 항목 보관 최대 수 (상세 보기용)
+MAX_FAILED_ITEMS = 100
+
 # 완료 알림 최소 소요 시간(초) — 이보다 짧은 성공 잡은 알림 생략(실패는 항상 알림)
 NOTIFY_MIN_SEC = 3.0
 
@@ -44,6 +47,13 @@ def _set_local_totals(job: "JobState", local_paths: list[str]) -> None:
         job.total_bytes = sum(f.stat().st_size for f, _ in files)
     except Exception:
         pass
+
+
+def _set_route(job: "JobState", source: str, dest: str, items: list[str] | None) -> None:
+    """잡의 출발/도착 위치와 대상 항목(상세 보기용)을 기록한다."""
+    job.source = source
+    job.dest = dest
+    job.items = [str(x) for x in (items or [])][:MAX_FAILED_ITEMS]
 
 
 # 잡 종류 → 사람이 읽는 라벨(알림용)
@@ -80,6 +90,13 @@ class JobState:
     finished_at: datetime | None = None
     error: str | None = None
     current_file: str = ""
+    # 출발/도착 위치 표기(상세 보기용)
+    source: str = ""
+    dest: str = ""
+    # 전송 대상 항목(소스 경로들, 상세 보기용, 최대 MAX_FAILED_ITEMS개)
+    items: list[str] = field(default_factory=list)
+    # 실패한 파일 목록(상세 보기용, 최대 MAX_FAILED_ITEMS개)
+    failed_items: list[dict[str, str]] = field(default_factory=list)
 
     # WebSocket 구독자 큐 목록 (asyncio.Queue)
     _queues: list[asyncio.Queue] = field(default_factory=list, repr=False)
@@ -107,6 +124,10 @@ class JobState:
             "startedAt": self.started_at.isoformat() if self.started_at else None,
             "finishedAt": self.finished_at.isoformat() if self.finished_at else None,
             "error": self.error,
+            "source": self.source,
+            "dest": self.dest,
+            "items": self.items,
+            "failedItems": self.failed_items,
         }
 
     @classmethod
@@ -126,6 +147,10 @@ class JobState:
         job.started_at = _dt(d.get("startedAt"))
         job.finished_at = _dt(d.get("finishedAt"))
         job.error = d.get("error")
+        job.source = d.get("source", "")
+        job.dest = d.get("dest", "")
+        job.items = d.get("items", []) or []
+        job.failed_items = d.get("failedItems", []) or []
         return job
 
 
@@ -253,15 +278,30 @@ class JobManager:
         if job and queue in job._queues:
             job._queues.remove(queue)
 
+    @staticmethod
+    def _safe_put(q: asyncio.Queue, event: dict) -> None:
+        """이벤트 루프 안에서 실행 — 큐가 가득 차면 가장 오래된 것을 버리고 최신을 넣는다.
+
+        put_nowait 는 call_soon_threadsafe 로 예약되므로 QueueFull 은 루프 콜백
+        안에서 발생한다. 여기서 잡지 않으면 대량 전송(수천 건) 시 느리거나 끊긴
+        구독자의 큐가 가득 차 예외가 폭주하고 이벤트 루프가 마비된다(서버 전체 무응답).
+        """
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()  # drop-oldest — 진행률은 최신 값이 중요
+                q.put_nowait(event)
+            except Exception:
+                pass
+
     def _push_event(self, job: JobState, event: dict) -> None:
         """모든 구독 큐에 이벤트를 push한다. 스레드-세이프."""
         if not self._loop:
             return
         for q in list(job._queues):
             try:
-                self._loop.call_soon_threadsafe(q.put_nowait, event)
-            except asyncio.QueueFull:
-                logger.warning("잡 이벤트 큐 가득 참 (job_id=%s)", job.job_id)
+                self._loop.call_soon_threadsafe(self._safe_put, q, event)
             except Exception as exc:
                 logger.debug("이벤트 push 실패: %s", exc)
 
@@ -272,24 +312,27 @@ class JobManager:
     def _make_callbacks(self, job: JobState):
         """잡에 연결된 on_bytes / on_file 콜백을 반환한다."""
 
-        def on_bytes(n: int) -> None:
-            with job._counter_lock:
-                job.transferred_bytes += n
+        def _emit_progress_throttled() -> None:
+            """throttled progress 이벤트 발행. on_bytes/on_file 이 공유해 호출한다.
+
+            대량 작업(수천 파일)에서 파일마다 이벤트를 push 하면 call_soon_threadsafe
+            콜백이 이벤트 루프에 폭주해 루프가 마비되고 HTTP(연결/health)를 못 받는다.
+            그래서 파일별 이벤트는 없애고, 진행률만 PROGRESS_THROTTLE_SEC 주기로 병합해 보낸다.
+            """
             now = time.monotonic()
             if now - job._last_progress_ts < PROGRESS_THROTTLE_SEC:
                 return
             job._last_progress_ts = now
-
             elapsed = now - job._transfer_start if job._transfer_start else 1e-9
             speed = job.transferred_bytes / elapsed if elapsed > 0 else 0
             remaining = job.total_bytes - job.transferred_bytes
             eta = int(remaining / speed) if speed > 0 else None
-
             self._push_event(
                 job,
                 {
                     "type": "progress",
                     "completedFiles": job.completed_files,
+                    "failedFiles": job.failed_files,
                     "totalFiles": job.total_files,
                     "transferredBytes": job.transferred_bytes,
                     "totalBytes": job.total_bytes,
@@ -299,22 +342,24 @@ class JobManager:
                 },
             )
 
+        def on_bytes(n: int) -> None:
+            with job._counter_lock:
+                job.transferred_bytes += n
+            _emit_progress_throttled()
+
         def on_file(key: str, success: bool, error_msg: str | None) -> None:
             with job._counter_lock:
                 if success:
                     job.completed_files += 1
                 else:
                     job.failed_files += 1
+                    if len(job.failed_items) < MAX_FAILED_ITEMS:
+                        job.failed_items.append({"key": key, "error": error_msg or "실패"})
             job.current_file = key
-            self._push_event(
-                job,
-                {
-                    "type": "file",
-                    "key": key,
-                    "status": "done" if success else "failed",
-                    "error": error_msg,
-                },
-            )
+            # 파일별 이벤트는 프론트가 소비하지 않고 루프만 마비시키므로 발행하지 않는다.
+            # 실패/완료 카운트가 오를 때도 진행률이 갱신되도록 throttled progress 만 보낸다
+            # (실패는 바이트가 안 늘어 on_bytes 가 안 불릴 수 있으므로 여기서도 호출).
+            _emit_progress_throttled()
 
         return on_bytes, on_file
 
@@ -399,6 +444,7 @@ class JobManager:
     ) -> str:
         """다운로드 잡을 생성하고 jobId를 반환한다."""
         job = self._new_job("download", local_dir=local_dir)
+        _set_route(job, f"s3://{bucket}", local_dir, (prefixes or []) + (keys or []))
 
         on_bytes, on_file = self._make_callbacks(job)
 
@@ -438,6 +484,7 @@ class JobManager:
         src_dir = os.path.dirname(local_paths[0]) if local_paths else ""
         job = self._new_job("upload", local_dir=src_dir)
         _set_local_totals(job, local_paths)
+        _set_route(job, "로컬", f"s3://{bucket}/{prefix}", local_paths)
 
         on_bytes, on_file = self._make_callbacks(job)
 
@@ -471,6 +518,7 @@ class JobManager:
     ) -> str:
         """원격 → 로컬 다운로드 잡을 생성하고 jobId를 반환한다."""
         job = self._new_job("remote-download", local_dir=local_dir)
+        _set_route(job, "원격", local_dir, (remote_dirs or []) + (keys or []))
 
         # 총 크기/파일 수 미리 파악 (best-effort)
         try:
@@ -515,6 +563,7 @@ class JobManager:
         src_dir = os.path.dirname(local_paths[0]) if local_paths else ""
         job = self._new_job("remote-upload", local_dir=src_dir)
         _set_local_totals(job, local_paths)
+        _set_route(job, "로컬", f"원격:{remote_dir}", local_paths)
 
         on_bytes, on_file = self._make_callbacks(job)
 
@@ -549,6 +598,7 @@ class JobManager:
     ) -> str:
         """S3 → 원격 전송 잡을 생성한다."""
         job = self._new_job("s3-to-remote")
+        _set_route(job, f"s3://{bucket}", f"원격:{remote_dir}", (prefixes or []) + (keys or []))
         try:
             targets = transfer_engine._enumerate_s3(s3_client, bucket, prefixes, keys)
             s = transfer_engine.summarize(targets)
@@ -583,6 +633,7 @@ class JobManager:
     ) -> str:
         """원격 → S3 전송 잡을 생성한다."""
         job = self._new_job("remote-to-s3")
+        _set_route(job, "원격", f"s3://{bucket}/{prefix}", (remote_dirs or []) + (keys or []))
         try:
             targets = transfer_engine._enumerate_remote(ssh, remote_dirs, keys)
             s = transfer_engine.summarize(targets)
@@ -616,6 +667,7 @@ class JobManager:
     ) -> str:
         """원격 → 원격 전송 잡을 생성한다(Mac 경유 릴레이)."""
         job = self._new_job("remote-to-remote")
+        _set_route(job, "원격(소스)", f"원격(대상):{dest_dir}", (src_dirs or []) + (src_keys or []))
         try:
             targets = transfer_engine._enumerate_remote(ssh_src, src_dirs, src_keys)
             s = transfer_engine.summarize(targets)

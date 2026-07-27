@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   ChevronRight,
   ChevronDown,
@@ -36,9 +36,11 @@ interface TreeSidebarProps {
   onNodeSelect?: (bucket: string, prefix: string, isFolder: boolean) => void
   /** 우클릭 "업로드 위치로 설정" — 버킷+prefix를 업로드 대상으로 지정 */
   onSetUploadDest?: (bucket: string, prefix: string) => void
+  /** 업로드 패널에서 새 폴더를 만들면 해당 prefix를 새로고침하라는 신호(nonce). */
+  refreshSignal?: { bucket: string; prefix: string; nonce: number }
 }
 
-export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetUploadDest }: TreeSidebarProps) {
+export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetUploadDest, refreshSignal }: TreeSidebarProps) {
   const { state, dispatch } = useAppStore()
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   const [preview, setPreview] = useState<{ src: string; title: string } | null>(null)
@@ -71,6 +73,20 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
   const [hiddenBuckets, setHiddenBuckets] = useState<Set<string>>(new Set())
   const [showHidden, setShowHidden] = useState(false)
   const [filter, setFilter] = useState('')
+  const filterRef = useRef<HTMLInputElement>(null)
+
+  // Cmd+K(⌘K)로 버킷 검색 입력에 포커스
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        filterRef.current?.focus()
+        filterRef.current?.select()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const toast = (message: string, variant: 'error' | 'success' | 'info' = 'error') => {
     dispatch({
@@ -153,6 +169,22 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
       })
     }
   }, [loading])
+
+  // 업로드 패널에서 새 폴더 생성 → 해당 prefix 캐시 무효화 후, 펼쳐져 있으면 다시 로드
+  useEffect(() => {
+    if (!refreshSignal || refreshSignal.nonce <= 0) return
+    const { bucket, prefix } = refreshSignal
+    const childKey = `${bucket}::${prefix}`
+    setChildren(prev => {
+      const next = new Map(prev)
+      next.delete(childKey)
+      return next
+    })
+    const expandKey = prefix ? `folder::${prefix}` : `bucket::${bucket}`
+    if (expanded.has(expandKey)) {
+      void loadObjects(bucket, prefix)
+    }
+  }, [refreshSignal?.nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleBucket = async (bucket: string) => {
     dispatch({ type: 'SET_BUCKET', payload: bucket })
@@ -331,9 +363,10 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
           <div className="relative">
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-600" />
             <input
+              ref={filterRef}
               value={filter}
               onChange={e => setFilter(e.target.value)}
-              placeholder="버킷 검색..."
+              placeholder="버킷 검색... (⌘K)"
               className="w-full bg-zinc-900 border border-zinc-800 rounded pl-7 pr-6 py-1 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
             />
             {filter && (

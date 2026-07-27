@@ -30,6 +30,7 @@ BytesCallback = Callable[[int], None]
 FileCallback = Callable[[str, bool, str | None], None]
 
 CHUNK = 1024 * 1024  # 릴레이 청크 크기
+RELAY_QUEUE_DEPTH = 8  # 릴레이 read↔write 오버랩 버퍼(청크 단위) = 약 8MB 백프레셔
 PRESIGN_EXPIRES = 3600  # presigned URL 만료(초)
 
 
@@ -179,22 +180,28 @@ def _run(
     success = 0
     failure = 0
     lock = threading.Lock()
+    # 첫 직통 실패 시 set — 이후 파일은 직통을 건너뛰고 바로 릴레이로 간다.
+    # 원격이 S3에 못 닿는 경우(사전점검은 통과해도 버킷 서브도메인 DNS 실패 등)
+    # 파일마다 curl 을 헛되이 시도하지 않도록 잡당 1회 실패로 학습한다.
+    direct_off = threading.Event()
 
     def worker(item):
         label = item[0]
         if cancel_event and cancel_event.is_set():
             return label, False, "취소됨"
-        # 1) 직통 시도
-        if use_direct:
+        # 1) 직통 시도 (아직 직통이 죽지 않았을 때만)
+        if use_direct and not direct_off.is_set():
             try:
                 ok, err = direct_fn(item)
                 if ok:
                     return label, True, None
-                logger.warning("직통 실패(%s) → 릴레이 폴백: %s", label, err)
+                direct_off.set()
+                logger.info("직통 실패(%s) → 이후 릴레이 전환: %s", label, err)  # 잡당 1회
             except TransferCanceled:
                 return label, False, "취소됨"
             except Exception as exc:
-                logger.warning("직통 예외(%s) → 릴레이 폴백: %s", label, exc)
+                direct_off.set()
+                logger.info("직통 예외(%s) → 이후 릴레이 전환: %s", label, exc)  # 잡당 1회
         # 2) 릴레이 (직통 미사용이거나 직통 실패 시)
         sftp = None
         try:
@@ -204,7 +211,7 @@ def _run(
         except TransferCanceled:
             return label, False, "취소됨"
         except Exception as exc:
-            logger.error("전송 실패(%s): %s", label, exc)
+            logger.debug("전송 실패(%s): %s", label, exc)  # per-file — debug (로그 범람 방지)
             return label, False, str(exc)
         finally:
             if sftp is not None:
@@ -280,23 +287,52 @@ def s3_to_remote(
 
 
 def _relay_remote_copy(s_sftp, d_sftp, src_path, dst_path, on_bytes, cancel_event):
-    """원격A 파일을 읽어 원격B에 스트리밍 기록(Mac 경유, 디스크 미사용)."""
+    """원격A 파일을 읽어 원격B에 스트리밍 기록(Mac 경유, 디스크 미사용).
+
+    src 읽기(생산자 스레드)와 dst 쓰기(현재 스레드)를 분리해 두 hop을 동시에 진행한다.
+    별도 채널(s_sftp/d_sftp)을 각 스레드가 단독 사용하므로 채널 동시성 문제는 없다.
+    """
     parent = posixpath.dirname(dst_path)
     if parent:
         sftp_engine._sftp_makedirs(d_sftp, parent)
-    with s_sftp.open(src_path, "rb") as rf:
-        rf.prefetch()
+
+    q: queue_mod.Queue = queue_mod.Queue(maxsize=RELAY_QUEUE_DEPTH)
+    read_err: dict = {}
+
+    def _reader():
+        try:
+            with s_sftp.open(src_path, "rb") as rf:
+                rf.prefetch()
+                while True:
+                    if cancel_event and cancel_event.is_set():
+                        break
+                    chunk = rf.read(CHUNK)
+                    if not chunk:
+                        break
+                    q.put(chunk)
+        except Exception as exc:
+            read_err["e"] = exc
+        finally:
+            q.put(None)  # 종료 sentinel
+
+    rt = threading.Thread(target=_reader, daemon=True)
+    rt.start()
+    try:
         with d_sftp.open(dst_path, "wb") as wf:
             wf.set_pipelined(True)
             while True:
                 if cancel_event and cancel_event.is_set():
                     raise TransferCanceled()
-                chunk = rf.read(CHUNK)
-                if not chunk:
+                chunk = q.get()
+                if chunk is None:
                     break
                 wf.write(chunk)
                 if on_bytes:
                     on_bytes(len(chunk))
+    finally:
+        rt.join(timeout=5)
+    if "e" in read_err:
+        raise read_err["e"]
 
 
 def remote_to_remote(
@@ -358,7 +394,7 @@ def remote_to_remote(
             except TransferCanceled:
                 return
             except Exception as exc:
-                logger.error("원격→원격 전송 실패(%s): %s", src_path, exc)
+                logger.debug("원격→원격 전송 실패(%s): %s", src_path, exc)  # per-file
                 ok, err = False, str(exc)
             with lock:
                 counts["success" if ok else "failure"] += 1

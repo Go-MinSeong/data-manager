@@ -11,6 +11,9 @@ def main():
 
     jm = JobManager()
     jm._history_path = hist
+    # 생성자가 실제 jobs.json(최대 100건)을 로드하므로 격리를 위해 비운다.
+    # (안 그러면 finished_at 없는 테스트 잡이 정렬 맨 뒤로 밀려 MAX_JOB_HISTORY 컷에 잘림)
+    jm._jobs.clear()
 
     # 완료 잡 1건을 직접 구성해 영속화
     job = JobState(job_id="job-123", kind="remote-download")

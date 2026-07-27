@@ -80,6 +80,18 @@ def connect(
         connect_kwargs["password"] = password
 
     client.connect(**connect_kwargs)
+
+    # 고지연(WAN) 링크에서 SFTP 처리량을 높이기 위해 채널 윈도우를 키운다.
+    # paramiko 기본 2MB → 8MB (이후 open_sftp로 여는 채널이 이 값을 상속).
+    # 더 많은 데이터를 in-flight로 두어 대역폭-지연 곱이 큰 링크를 잘 채운다.
+    transport = client.get_transport()
+    if transport is not None:
+        transport.default_window_size = 8 * 1024 * 1024
+        # keepalive: 대용량·장시간 전송 중 유휴로 연결이 조용히 끊기면 get/put 이
+        # 소켓 read 에서 무한 대기(hang)한다. 15초 keepalive 로 죽은 피어를 감지해
+        # 예외로 끊어 재시도 경로를 타게 한다.
+        transport.set_keepalive(15)
+
     return client
 
 
@@ -331,8 +343,10 @@ def _run_with_channel_pool(
 
     counts = {"success": 0, "failure": 0}
     lock = threading.Lock()
+    RETRIES = 3
 
-    def worker(sftp: paramiko.SFTPClient) -> None:
+    def worker(holder: list) -> None:
+        # holder[0]: 이 워커의 현재 SFTP 채널. 전송 실패 시 죽은 채널일 수 있어 재연결로 교체한다.
         while True:
             if cancel_event and cancel_event.is_set():
                 return
@@ -340,29 +354,48 @@ def _run_with_channel_pool(
                 key, payload = work_q.get_nowait()
             except queue.Empty:
                 return
-            try:
-                ok = bool(op(sftp, payload))
-                err = None if ok else "전송 실패"
-            except TransferCanceled:
-                logger.debug("전송 취소됨 (%s)", key)
-                return  # 취소 시 이 워커는 남은 작업을 처리하지 않고 종료
-            except Exception as exc:
-                logger.error("전송 실패 (%s): %s", key, exc)
-                ok = False
-                err = str(exc)
+            ok = False
+            err: str | None = "전송 실패"
+            for attempt in range(RETRIES):
+                try:
+                    ok = bool(op(holder[0], payload))
+                    err = None if ok else "전송 실패"
+                    break
+                except TransferCanceled:
+                    logger.debug("전송 취소됨 (%s)", key)
+                    return  # 취소 시 이 워커는 남은 작업을 처리하지 않고 종료
+                except Exception as exc:
+                    ok = False
+                    err = str(exc)
+                    # per-file/attempt — debug (대량 작업 시 로그 스트림 락으로 서버 정체 방지)
+                    logger.debug(
+                        "전송 실패, 재시도 %d/%d (%s): %s", attempt + 1, RETRIES, key, exc
+                    )
+                    if attempt < RETRIES - 1:
+                        time.sleep(0.5 * (attempt + 1))  # 백오프
+                        # 채널이 끊겼을 수 있으니 재연결해 다음 시도에 사용
+                        try:
+                            holder[0].close()
+                        except Exception:
+                            pass
+                        try:
+                            holder[0] = _open_sftp_retry(ssh)
+                        except Exception:
+                            pass  # 재연결 실패 시 다음 시도도 실패 → 최종 실패로 계상
             with lock:
                 counts["success" if ok else "failure"] += 1
             if on_file:
                 on_file(key, ok, err)
 
-    threads = [threading.Thread(target=worker, args=(c,), daemon=True) for c in channels]
+    holders = [[c] for c in channels]
+    threads = [threading.Thread(target=worker, args=(h,), daemon=True) for h in holders]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    for c in channels:
+    for h in holders:
         try:
-            c.close()
+            h[0].close()
         except Exception:
             pass
 
