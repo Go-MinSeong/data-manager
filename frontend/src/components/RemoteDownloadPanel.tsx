@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { FolderOpen, Download, Gauge, X } from 'lucide-react'
+import { FolderOpen, Download, Gauge, X, Loader2 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
 import { useSubmitGuard } from '../hooks/useSubmitGuard'
+import { useSelectionCount } from '../hooks/useSelectionCount'
 import { useAppStore } from '../store/appStore'
 import { JobProgress } from './JobProgress'
-import { formatSpeed } from './ProgressBar'
+import { formatSpeed, formatBytes } from './ProgressBar'
 
 interface RemoteDownloadPanelProps {
   checkedKeys: Set<string>
@@ -30,6 +31,13 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
   const { state: jobState, close: closeJob } = useJob(jobId)
   const { submitting, run } = useSubmitGuard()
 
+  // 선택한 폴더/파일의 재귀 파일 수·크기를 자동 계산(폴더별 1회 열거 후 캐시)
+  const { count, loading: countLoading } = useSelectionCount(
+    checkedKeys,
+    state.remoteConnection.connected ? (state.remoteConnection.host ?? 'remote') : null,
+    (p) => api.getRemoteFlat(p.replace(/\/$/, '')),
+  )
+
   const handleMeasure = async () => {
     setMeasuring(true); setSpeed(null)
     try {
@@ -40,18 +48,10 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
     } finally { setMeasuring(false) }
   }
 
-  const handleRecommend = async () => {
-    if (checkedKeys.size === 0) return
-    try {
-      let tf = 0, tb = 0
-      const dirs = [...checkedKeys].filter(k => k.endsWith('/'))
-      tf = [...checkedKeys].filter(k => !k.endsWith('/')).length
-      for (const d of dirs) {
-        const r = await api.getRemoteFlat(d.replace(/\/$/, ''))
-        tf += r.totalFiles; tb += r.totalBytes
-      }
-      setMaxWorkers(api.recommendWorkers(tf, tb))
-    } catch { /* 무시 */ }
+  const handleRecommend = () => {
+    if (!count) { toast('파일 수를 계산 중입니다. 잠시 후 다시 시도하세요.', 'info'); return }
+    setMaxWorkers(api.recommendWorkers(count.totalFiles, count.totalBytes))
+    toast('파일 수·크기에 맞춰 동시 수를 추천했습니다.', 'info')
   }
 
   useEffect(() => {
@@ -125,7 +125,10 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
         {/* 선택된 항목 */}
         <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 mb-4">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-zinc-400">선택된 항목 ({checkedKeys.size})</span>
+            <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+              선택된 항목 ({checkedKeys.size})
+              {countLoading && <Loader2 size={11} className="animate-spin text-zinc-500" />}
+            </span>
             {checkedKeys.size > 0 && onCheckedChange && (
               <button
                 onClick={() => onCheckedChange(new Set())}
@@ -163,6 +166,15 @@ export function RemoteDownloadPanel({ checkedKeys, onCheckedChange }: RemoteDown
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+          {count && (
+            <div className="mt-2 pt-2 border-t border-zinc-700 flex gap-4 text-xs text-zinc-400">
+              <span>
+                <span className="text-zinc-200 tabular-nums">{count.totalFiles.toLocaleString()}</span>개 파일
+                {countLoading && <span className="text-zinc-600"> (계산 중…)</span>}
+              </span>
+              <span className="text-zinc-200 tabular-nums">{formatBytes(count.totalBytes)}</span>
             </div>
           )}
         </div>
