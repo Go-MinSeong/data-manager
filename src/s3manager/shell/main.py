@@ -207,7 +207,16 @@ def main() -> None:
 
     # pywebview 5.x closing 이벤트: False 반환 → 닫기 취소
     def on_closing() -> bool:
-        """창 닫기 시도 시 호출. False 반환으로 닫기를 취소하고 숨긴다."""
+        """창 닫기 시도 시 호출.
+
+        빨간 버튼이면 숨기고(False), **진짜 종료 요청이면 허용한다(True).**
+        pywebview의 applicationShouldTerminate_ 는 모든 창의 closing 결과를 AND 해서
+        종료 여부를 정하므로, 늘 False를 주면 로그아웃·시스템 종료가 차단된다
+        ("앱이 종료되지 않아 컴퓨터를 끌 수 없음").
+        `_quit_requested`는 아래에서 정의되지만 클로저는 호출 시점에 해석되므로 괜찮다.
+        """
+        if _quit_requested.is_set():
+            return True
         on_window_closed()
         return False  # False = 닫기 취소
 
@@ -259,6 +268,20 @@ def main() -> None:
             from webview.platforms.cocoa import BrowserView
 
             class _ReopenDelegate(BrowserView.AppDelegate):
+                def applicationShouldTerminate_(self, app):  # noqa: N802
+                    """Cmd+Q·로그아웃·시스템 종료 — 항상 종료를 허용한다.
+
+                    상위 구현(super)을 부르지 않는다. pywebview의 구현은 모든 창의
+                    closing 결과를 AND 하는 것뿐이고, 그 판단은 우리가 이미 내렸다.
+                    게다가 PyObjC에서 파이썬 기본 super()는 ObjC 메서드로 제대로
+                    디스패치되지 않는다 (ObjCSuperWarning) — 그래서 종료가 거부됐다.
+
+                    1 = NSTerminateNow. 종료를 막지 않는 것이 이 앱의 올바른 동작이다:
+                    막으면 사용자가 컴퓨터를 끌 수 없다.
+                    """
+                    _quit_requested.set()
+                    return 1
+
                 def applicationShouldHandleReopen_hasVisibleWindows_(  # noqa: N802
                     self, app, flag
                 ):
