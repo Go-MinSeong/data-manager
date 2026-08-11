@@ -44,9 +44,17 @@ function AppInner() {
   // 드래그-드롭 파일 — 셸(pywebview)이 window.__onFilesDropped(paths)로 절대경로 전달
   const [s3UploadFiles, setS3UploadFiles] = useState({ paths: [] as string[], nonce: 0 })
   const [remoteUploadFiles, setRemoteUploadFiles] = useState({ paths: [] as string[], nonce: 0 })
+  const [dropBusy, setDropBusy] = useState(false)
 
   useEffect(() => {
-    ;(window as unknown as { __onFilesDropped?: (p: string[]) => void }).__onFilesDropped = (paths) => {
+    const w = window as unknown as {
+      __onFilesDropStart?: () => void
+      __onFilesDropped?: (p: string[]) => void
+    }
+    // 드롭이 웹뷰에 전달되는 즉시 호출 — 경로 처리/렌더 동안 로딩을 보여준다.
+    w.__onFilesDropStart = () => setDropBusy(true)
+    w.__onFilesDropped = (paths) => {
+      setDropBusy(false)
       if (!Array.isArray(paths) || paths.length === 0) return
       if (state.mode === 's3' && state.activeTab === 'upload') {
         setS3UploadFiles(p => ({ paths, nonce: p.nonce + 1 }))
@@ -54,7 +62,9 @@ function AppInner() {
         setRemoteUploadFiles(p => ({ paths, nonce: p.nonce + 1 }))
       } else {
         dispatch({ type: 'ADD_TOAST', payload: { id: '', message: '업로드 탭에서 파일을 놓아주세요.', variant: 'info' } })
+        return
       }
+      dispatch({ type: 'ADD_TOAST', payload: { id: '', message: `${paths.length}개 항목을 추가했습니다.`, variant: 'success' } })
     }
   }, [state.mode, state.activeTab])
 
@@ -178,6 +188,16 @@ function AppInner() {
             </>
           )}
         </div>
+
+        {/* 드롭한 파일 처리 중 표시 */}
+        {dropBusy && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 pointer-events-none">
+            <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 shadow-2xl">
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="text-sm text-zinc-200">파일 추가 중…</span>
+            </div>
+          </div>
+        )}
 
         {/* 토스트 알림 */}
         <ToastContainer />

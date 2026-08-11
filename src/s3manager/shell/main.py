@@ -344,11 +344,14 @@ def main() -> None:
 
             def _on_drop(event) -> None:
                 try:
+                    # 드롭이 전달되는 즉시 로딩 표시(경로 추출·프론트 렌더 동안).
+                    window.evaluate_js(
+                        "window.__onFilesDropStart && window.__onFilesDropStart()"
+                    )
                     files = (event or {}).get("dataTransfer", {}).get("files", []) or []
                     paths = [f.get("pywebviewFullPath") for f in files]
                     paths = [p for p in paths if p]
-                    if not paths:
-                        return
+                    # 빈 목록도 전달해 로딩 표시를 반드시 해제한다.
                     window.evaluate_js(
                         "window.__onFilesDropped && window.__onFilesDropped("
                         + _json.dumps(paths)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FilePlus, Upload, X, FolderPlus } from 'lucide-react'
+import { FilePlus, Upload, X, FolderPlus, FolderInput, Loader2 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useJob } from '../hooks/useJob'
 import { useSubmitGuard } from '../hooks/useSubmitGuard'
@@ -44,18 +44,31 @@ export function UploadPanel({ preset, filesPreset, onFolderCreated }: UploadPane
     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), message, variant } })
   }
 
+  const [picking, setPicking] = useState(false)
+
   const handlePickFiles = async () => {
+    setPicking(true)
     try {
       const res = await api.pickFiles()
       if (res.paths.length > 0) {
-        setLocalPaths(prev => {
-          const combined = [...prev, ...res.paths]
-          // 중복 제거
-          return [...new Set(combined)]
-        })
+        setLocalPaths(prev => [...new Set([...prev, ...res.paths])])
       }
     } catch {
       toast('파일 선택 실패 (네이티브 앱에서 지원)')
+    } finally {
+      setPicking(false)
+    }
+  }
+
+  const handlePickFolder = async () => {
+    setPicking(true)
+    try {
+      const res = await api.pickFolder()
+      if (res.path) setLocalPaths(prev => [...new Set([...prev, res.path!])])
+    } catch {
+      toast('폴더 선택 실패 (네이티브 앱에서 지원)')
+    } finally {
+      setPicking(false)
     }
   }
 
@@ -189,12 +202,22 @@ export function UploadPanel({ preset, filesPreset, onFolderCreated }: UploadPane
                   전체 해제
                 </button>
               )}
+              {picking && <Loader2 size={11} className="animate-spin text-zinc-500" />}
               <button
                 onClick={handlePickFiles}
-                className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                disabled={picking}
+                className="text-xs text-blue-400 hover:text-blue-300 disabled:text-zinc-600 transition-colors flex items-center gap-1"
               >
                 <FilePlus size={11} />
-                선택
+                파일
+              </button>
+              <button
+                onClick={handlePickFolder}
+                disabled={picking}
+                className="text-xs text-blue-400 hover:text-blue-300 disabled:text-zinc-600 transition-colors flex items-center gap-1"
+              >
+                <FolderInput size={11} />
+                폴더
               </button>
             </div>
           </div>
