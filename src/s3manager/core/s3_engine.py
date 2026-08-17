@@ -44,11 +44,22 @@ FileCallback = Callable[[str, bool, str | None], None]  # (key, success, error_m
 # 내부 유틸
 # ---------------------------------------------------------------------------
 
+CHUNK = 1024 * 1024  # 다운로드 스트림 읽기 단위(취소 확인 주기이기도 하다)
+
+
 def _strip_prefix(key: str, prefix: str) -> str:
     """key에서 prefix를 제거하고 앞의 '/'를 벗긴다."""
     if prefix and key.startswith(prefix):
         return key[len(prefix):].lstrip("/")
     return key.lstrip("/")
+
+
+def _remove_quietly(path: Path) -> None:
+    """부분 다운로드(.part) 정리 — 실패해도 무시한다."""
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -179,34 +190,58 @@ def download_single(
 ) -> bool:
     """단일 S3 키를 로컬 경로로 다운로드한다.
 
+    download_file(s3transfer) 대신 get_object 스트림을 청크 루프로 직접 읽는다.
+    s3transfer 는 8MB 초과 파일을 내부 스레드 10개로 분할 전송하는데, 취소를
+    진행률 콜백(데이터가 읽힐 때만 호출)으로만 감지할 수 있어 커넥션 풀 대기·
+    응답 헤더 대기·소켓 read 블록 구간에서는 취소가 먹지 않았다(안 멈추거나
+    read_timeout 까지 지연). 여기서는 청크마다 취소를 확인해 즉시 중단한다.
+
+    임시 파일(.part)에 받고 완료 시에만 교체한다 — 취소·실패가 잘린 파일을
+    정상 파일처럼 남기지 않는다.
+
     Returns:
         성공 여부
     """
     if cancel_event and cancel_event.is_set():
         return False
 
+    local = Path(local_path)
+    tmp = local.with_name(local.name + ".part")
     try:
-        local = Path(local_path)
         local.parent.mkdir(parents=True, exist_ok=True)
 
-        kwargs: dict = {"Bucket": bucket, "Key": key, "Filename": str(local)}
-        if on_bytes or cancel_event:
-            kwargs["Callback"] = _BytesProgressCallback(on_bytes, cancel_event)
+        body = s3_client.get_object(Bucket=bucket, Key=key)["Body"]
+        try:
+            with open(tmp, "wb") as f:
+                while True:
+                    if cancel_event and cancel_event.is_set():
+                        raise TransferCanceled()
+                    chunk = body.read(CHUNK)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    if on_bytes:
+                        on_bytes(len(chunk))
+        finally:
+            body.close()
 
-        s3_client.download_file(**kwargs)
+        os.replace(tmp, local)
         return True
     except TransferCanceled:
         logger.debug("다운로드 취소됨 (%s)", key)
+        _remove_quietly(tmp)
         return False
     except ClientError as exc:
         # per-file — debug 유지(대량 작업 시 수천 건이면 로그 스트림 락에서 서버가 정체됨).
         # 실패는 on_file 콜백으로 UI(실패 목록)에 보고된다.
         logger.debug("다운로드 실패 (%s): %s", key, exc)
         _diag_trace("다운로드 실패", key, exc)
+        _remove_quietly(tmp)
         return False
     except Exception as exc:
         logger.debug("다운로드 중 예외 (%s): %s", key, exc)
         _diag_trace("다운로드 중 예외", key, exc)
+        _remove_quietly(tmp)
         return False
 
 
@@ -277,6 +312,10 @@ def download_objects(
             future_to_key[fut] = s3_key
 
         for fut in as_completed(future_to_key):
+            # 취소되면 남은 항목을 실패로 집계·보고하지 않는다(수천 건이 '실패'로
+            # 기록되는 것 방지). 큐에 남은 작업은 시작 즉시 취소를 보고 곧바로 반환한다.
+            if cancel_event and cancel_event.is_set():
+                break
             s3_key = future_to_key[fut]
             try:
                 ok = fut.result()
