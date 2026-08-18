@@ -15,12 +15,44 @@ from pathlib import Path
 # 프로젝트 루트 (spec 파일 위치 기준 상위 디렉터리)
 PROJECT_ROOT = Path(SPECPATH).parent
 
+# 플랫폼 — macOS 는 .app 번들, Windows 는 폴더형 exe 로 만든다.
+IS_WINDOWS = os.name == "nt"
+IS_MACOS = sys.platform == "darwin"
+
 # 타깃 아키텍처 (기본 arm64). universal2는 universal2 Python에서만 빌드 가능.
-TARGET_ARCH = os.environ.get("S3M_ARCH", "arm64")
+# Windows 는 아키텍처 지정을 쓰지 않는다(호스트 아키텍처로 빌드).
+TARGET_ARCH = None if IS_WINDOWS else os.environ.get("S3M_ARCH", "arm64")
+
+# 앱 아이콘 — macOS .icns / Windows .ico
+ICON_PATH = str(
+    PROJECT_ROOT / "assets" / ("app_icon.ico" if IS_WINDOWS else "app_icon.icns")
+)
+if not Path(ICON_PATH).exists():
+    ICON_PATH = None  # 아이콘이 없어도 빌드는 되게 둔다
 
 # ------------------------------------------------------------------ #
 #  Analysis                                                            #
 # ------------------------------------------------------------------ #
+
+# 플랫폼별 hidden imports — 동적 로딩이라 PyInstaller 가 놓친다.
+if IS_WINDOWS:
+    PLATFORM_HIDDEN = [
+        "webview.platforms.edgechromium",  # WebView2 (Win11 기본 내장)
+        "webview.platforms.winforms",
+        "pystray._win32",
+        "keyring.backends.Windows",
+        "clr",  # pythonnet — winforms 백엔드가 사용
+    ]
+else:
+    PLATFORM_HIDDEN = [
+        "webview.platforms.cocoa",
+        "pystray._darwin",
+        "keyring.backends.macOS",
+        "objc",
+        "AppKit",
+        "Foundation",
+        "WebKit",
+    ]
 
 a = Analysis(
     # 진입점 스크립트
@@ -72,26 +104,18 @@ a = Analysis(
         "pydantic",
         "pydantic.deprecated",
         "pydantic.deprecated.class_validators",
-        # pywebview (macOS Cocoa 백엔드)
+        # pywebview (백엔드는 아래에서 플랫폼별로 추가)
         "webview",
         "webview.platforms",
-        "webview.platforms.cocoa",
-        # pystray (macOS)
+        # pystray (백엔드는 아래에서 플랫폼별로 추가)
         "pystray",
-        "pystray._darwin",
         # pillow
         "PIL",
         "PIL.Image",
         "PIL.ImageDraw",
-        # keyring (macOS Keychain)
+        # keyring (비밀 저장소 — 백엔드는 아래에서 플랫폼별로 추가)
         "keyring",
         "keyring.backends",
-        "keyring.backends.macOS",
-        # pyobjc 프레임워크
-        "objc",
-        "AppKit",
-        "Foundation",
-        "WebKit",
         # 기타
         "multipart",
         "python_multipart",
@@ -101,7 +125,7 @@ a = Analysis(
         "starlette.routing",
         "starlette.staticfiles",
         "starlette.responses",
-    ],
+    ] + PLATFORM_HIDDEN,
 
     hookspath=[],
     hooksconfig={},
@@ -143,10 +167,10 @@ exe = EXE(
     console=False,   # 터미널 창 없음 (GUI 앱)
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=TARGET_ARCH,   # 환경변수 S3M_ARCH (기본 arm64, universal2 가능)
+    target_arch=TARGET_ARCH,   # 환경변수 S3M_ARCH (기본 arm64, universal2 가능) / Windows=None
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(PROJECT_ROOT / "assets" / "app_icon.icns"),
+    icon=ICON_PATH,
 )
 
 # ------------------------------------------------------------------ #
@@ -160,17 +184,18 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="s3manager",
+    name="Data Manager" if IS_WINDOWS else "s3manager",
 )
 
 # ------------------------------------------------------------------ #
 #  BUNDLE (macOS .app 번들)                                            #
 # ------------------------------------------------------------------ #
 
-app = BUNDLE(
+# macOS 에서만 .app 번들을 만든다(Windows 는 위 COLLECT 폴더가 결과물).
+app = None if IS_WINDOWS else BUNDLE(
     coll,
     name="Data Manager.app",
-    icon=str(PROJECT_ROOT / "assets" / "app_icon.icns"),
+    icon=ICON_PATH,
     bundle_identifier="io.github.go-minseong.datamanager",
 
     # Info.plist 보강

@@ -36,10 +36,12 @@ from s3manager import settings
 # 데드락/행 상태에서도 동작한다(C 시그널 핸들러가 fd에 직접 write — 락·버퍼 우회).
 # 사용: kill -USR1 <pid>  → ~/Library/Logs/DataManager.log 에 스택이 찍힌다.
 faulthandler.enable()
-try:
-    faulthandler.register(signal.SIGUSR1, all_threads=True, chain=False)
-except Exception:
-    pass
+# SIGUSR1 은 유닉스 전용 — Windows 에는 없으므로 건너뛴다(Windows 진단은 로그 파일 사용).
+if hasattr(signal, "SIGUSR1"):
+    try:
+        faulthandler.register(signal.SIGUSR1, all_threads=True, chain=False)
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------------ #
@@ -84,7 +86,7 @@ def _wait_for_server(timeout: float = 30.0, interval: float = 0.2) -> bool:
 # ------------------------------------------------------------------ #
 
 def _install_native_drag() -> None:
-    """pywebview의 JS 좌표계산 드래그를 macOS 네이티브 드래그로 교체한다.
+    """pywebview의 JS 좌표계산 드래그를 macOS 네이티브 드래그로 교체한다(macOS 전용).
 
     기본 구현은 mousemove마다 JS→브릿지→setFrameTopLeftPoint_ 로 창을 옮기는데,
     좌표 뒤집기가 창 생성 당시의 단일 스크린 기준이라 다른 모니터(원점·높이 상이)로
@@ -95,6 +97,8 @@ def _install_native_drag() -> None:
     버튼 클릭 제외)는 그대로 두고 실제 이동만 위임한다. 인스턴스 move() 는 드래그 시
     AppHelper.callAfter 로 메인 스레드에서 호출되므로 AppKit 직접 호출이 안전하다.
     """
+    if not settings.IS_MACOS:
+        return
     try:
         import AppKit
         from webview.platforms import cocoa
@@ -190,12 +194,19 @@ def main() -> None:
             _window_visible[0] = True
         except Exception:
             pass
-        try:
-            import AppKit
+        if settings.IS_MACOS:
+            try:
+                import AppKit
 
-            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-        except Exception:
-            pass
+                AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+            except Exception:
+                pass
+        else:
+            # Windows: 창을 앞으로 (pywebview 가 지원하면 사용, 실패해도 show 로 충분)
+            try:
+                window.restore()
+            except Exception:
+                pass
 
     def on_window_closed() -> None:
         """창 닫기 버튼 → 실제로 닫지 않고 숨긴다."""
@@ -263,6 +274,8 @@ def main() -> None:
         창이 다시 보이도록 reopen 델리게이트를 단다. pywebview의 AppDelegate를 상속해
         종료 처리 등 기존 동작은 그대로 유지한다.
         """
+        if not settings.IS_MACOS:
+            return
         try:
             import AppKit
             from webview.platforms.cocoa import BrowserView
@@ -307,6 +320,8 @@ def main() -> None:
         pywebview가 타이틀바에 칠한 배경색을 투명으로 되돌려 앱의 어두운 헤더가
         그대로 비치게 한다. macOS 신호등(닫기·최소화·확대) 버튼은 그대로 유지된다.
         """
+        if not settings.IS_MACOS:
+            return  # Windows 는 네이티브 타이틀바를 그대로 사용한다
         try:
             import AppKit
 

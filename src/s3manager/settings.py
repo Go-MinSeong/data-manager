@@ -5,8 +5,13 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+# 플랫폼 분기 — 셸(창·트레이·알림·자동시작)과 사용자 데이터 경로가 갈린다.
+IS_MACOS = sys.platform == "darwin"
+IS_WINDOWS = os.name == "nt"
 
 APP_NAME = "Data Manager"
 APP_ID = "io.github.go-minseong.datamanager"
@@ -20,7 +25,16 @@ BASE_URL = f"http://{HOST}:{PORT}"
 KEYRING_SERVICE = "io.github.go-minseong.datamanager"
 
 # 앱 사용자 데이터 디렉터리 (이력/설정 저장용)
-APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "S3Manager"
+# macOS 경로는 기존 사용자 데이터 보존을 위해 절대 바꾸지 않는다(폴더명 S3Manager는 역사적 이유).
+if IS_WINDOWS:
+    _appdata = os.environ.get("APPDATA")
+    APP_SUPPORT_DIR = (
+        Path(_appdata) / "DataManager"
+        if _appdata
+        else Path.home() / "AppData" / "Roaming" / "DataManager"
+    )
+else:
+    APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "S3Manager"
 
 # 기본 다운로드 경로
 DEFAULT_DOWNLOAD_DIR = Path.home() / "Downloads" / "s3_downloads"

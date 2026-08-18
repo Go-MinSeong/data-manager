@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Wifi, WifiOff, User, Globe, Server, Cloud, LogOut, ArrowLeftRight, Settings } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
+import { usePlatform } from '../hooks/usePlatform'
 import * as api from '../lib/api'
 import { SettingsPanel } from './SettingsPanel'
 import type { SourceMode } from '../types'
@@ -8,6 +9,9 @@ import type { SourceMode } from '../types'
 export function ConnectBar() {
   const { state, dispatch } = useAppStore()
   const { mode, connection, remoteConnection } = state
+  // macOS: 타이틀바를 앱 헤더와 합쳤으므로 신호등 자리를 비우고 헤더로 창을 끈다.
+  // Windows: 네이티브 타이틀바를 그대로 쓰므로 둘 다 필요 없다.
+  const { isMac } = usePlatform()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const modes: { id: SourceMode; label: string; icon: React.ReactNode }[] = [
@@ -42,7 +46,9 @@ export function ConnectBar() {
 
   return (
     <>
-    <header className="pywebview-drag-region h-11 flex items-center gap-3 pl-20 pr-4 bg-zinc-950 border-b border-zinc-800 shrink-0 select-none">
+    <header className={`h-11 flex items-center gap-3 pr-4 bg-zinc-950 border-b border-zinc-800 shrink-0 select-none ${
+      isMac ? 'pywebview-drag-region pl-20' : 'pl-4'
+    }`}>
       {/* 로고 — 구름은 테마 액센트(currentColor), 글자는 흰색 */}
       <div className="flex items-center gap-2 font-semibold text-sm text-zinc-200 mr-1">
         <svg viewBox="0 0 64 64" className="w-5 h-5 text-blue-500 shrink-0" fill="currentColor" aria-label="Data">

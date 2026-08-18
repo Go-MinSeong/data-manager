@@ -342,7 +342,11 @@ async def _startup() -> None:
 @app.get("/api/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """서버 상태 확인."""
-    return HealthResponse(ok=True, version=__version__)
+    return HealthResponse(
+        ok=True,
+        version=__version__,
+        platform="win32" if settings.IS_WINDOWS else "darwin",
+    )
 
 
 # ---------------------------------------------------------------------------

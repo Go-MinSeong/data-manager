@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import * as api from '../lib/api'
 import { useAppStore } from '../store/appStore'
+import { usePlatform } from '../hooks/usePlatform'
 import { copyText } from '../lib/clipboard'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { ImagePreview, isImagePath } from './ImagePreview'
@@ -42,6 +43,7 @@ interface TreeSidebarProps {
 
 export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetUploadDest, refreshSignal }: TreeSidebarProps) {
   const { state, dispatch } = useAppStore()
+  const { modKey } = usePlatform()
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   const [preview, setPreview] = useState<{ src: string; title: string } | null>(null)
 
@@ -366,7 +368,7 @@ export function TreeSidebar({ checkedKeys, onCheckedChange, onNodeSelect, onSetU
               ref={filterRef}
               value={filter}
               onChange={e => setFilter(e.target.value)}
-              placeholder="버킷 검색... (⌘K)"
+              placeholder={`버킷 검색... (${modKey}K)`}
               className="w-full bg-zinc-900 border border-zinc-800 rounded pl-7 pr-6 py-1 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
             />
             {filter && (

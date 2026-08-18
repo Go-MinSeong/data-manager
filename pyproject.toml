@@ -19,6 +19,9 @@ dependencies = [
     "pyobjc-framework-WebKit>=10.3; sys_platform == 'darwin'",
     "pystray>=0.19.5",
     "pillow>=10.4.0",
+    # Windows: pywebview 의 WinForms/EdgeChromium(WebView2) 백엔드에 필요.
+    # WebView2 런타임은 Windows 11 에 기본 내장이라 별도 설치가 필요 없다.
+    "pythonnet>=3.0.3; sys_platform == 'win32'",
 ]
 
 [project.scripts]

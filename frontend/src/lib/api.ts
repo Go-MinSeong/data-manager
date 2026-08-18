@@ -372,7 +372,7 @@ export const revealInFinder = (path: string) =>
   request<{ ok: boolean }>('POST', '/reveal', { path })
 
 export const getHealth = () =>
-  request<{ ok: true; version: string }>('GET', '/health')
+  request<{ ok: true; version: string; platform?: string }>('GET', '/health')
 
 // ── 환경설정 ──────────────────────────────────────────────────────────────────
 

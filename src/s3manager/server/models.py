@@ -338,6 +338,9 @@ class PickFilesResponse(CamelModel):
 class HealthResponse(CamelModel):
     ok: bool = True
     version: str
+    # "darwin" | "win32" | 기타 — 프론트가 플랫폼별 UI(신호등 여백, ⌘/Ctrl 표기,
+    # 창 드래그 영역)를 맞추는 데 쓴다.
+    platform: str = "darwin"
 
 
 # ---------------------------------------------------------------------------
