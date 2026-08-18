@@ -89,6 +89,56 @@ def test_spec_platform_hidden_imports():
         assert need in ns["PLATFORM_HIDDEN"], f"윈도우 hidden import 누락: {need}"
 
 
+
+
+def test_diagnostics_survives_no_stderr():
+    """윈도우 창 모드(.exe)는 sys.stderr 가 None — 임포트 시 죽으면 안 된다.
+
+    실제로 이 가드가 없으면 faulthandler.enable() 이 RuntimeError 를 던져
+    앱이 기동조차 못 했다(윈도우 첫 실행 크래시).
+    """
+    import subprocess
+    code = (
+        "import sys; sys.stderr = None; sys.stdout = None\n"
+        "import s3manager.shell.main as m\n"
+        "assert hasattr(m, '_setup_diagnostics')\n"
+    )
+    r = subprocess.run(
+        [str(ROOT / ".venv" / "bin" / "python"), "-c", code],
+        capture_output=True, text=True, cwd=str(ROOT),
+    )
+    assert r.returncode == 0, f"stderr=None 에서 임포트 실패:\n{r.stderr}"
+
+
+def test_windows_hidden_imports_cover_backends():
+    """winforms 가 임포트하는 모듈이 spec 에 다 들어갔는지(빌드 후 런타임 실패 방지)."""
+    import re as _re
+    src = (ROOT / "packaging" / "s3manager.spec").read_text(encoding="utf-8")
+    m = _re.search(r"(if IS_WINDOWS:\n\s+PLATFORM_HIDDEN.*?\n)(?=\na = Analysis\()", src, _re.S)
+    ns = {"IS_WINDOWS": True}
+    exec(m.group(1), ns)
+    hidden = ns["PLATFORM_HIDDEN"]
+    # webview/platforms/winforms.py 가 실제로 임포트하는 것들
+    for need in (
+        "webview.platforms.winforms",
+        "webview.platforms.edgechromium",
+        "webview.platforms.win32",
+        "clr",
+    ):
+        assert need in hidden, f"윈도우 hidden import 누락: {need}"
+
+
+def test_tray_windows_module_is_importable_and_sane():
+    """tray_windows 를 임포트하고(맥에서도 가능) 계약을 확인한다."""
+    import inspect
+    from s3manager.shell import tray_windows
+    sig = inspect.signature(tray_windows.create_status_item)
+    assert list(sig.parameters) == ["show_window", "quit_app"], sig
+    src = inspect.getsource(tray_windows)
+    assert "notify_module.set_backend" in src, "윈도우 알림 백엔드 등록이 빠졌다"
+    assert "daemon=True" in src, "트레이 스레드가 데몬이 아니면 종료를 막는다"
+
+
 def main():
     for fn in (
         test_macos_paths_unchanged,
@@ -96,6 +146,9 @@ def main():
         test_tray_dispatch_and_resilience,
         test_notify_dispatch,
         test_spec_platform_hidden_imports,
+        test_diagnostics_survives_no_stderr,
+        test_windows_hidden_imports_cover_backends,
+        test_tray_windows_module_is_importable_and_sane,
     ):
         fn()
         print(f"  ✓ {fn.__name__}")

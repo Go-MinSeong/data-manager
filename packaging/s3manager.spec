@@ -39,9 +39,13 @@ if IS_WINDOWS:
     PLATFORM_HIDDEN = [
         "webview.platforms.edgechromium",  # WebView2 (Win11 기본 내장)
         "webview.platforms.winforms",
+        "webview.platforms.win32",  # winforms 백엔드가 직접 임포트한다
         "pystray._win32",
+        "pystray._util.win32",
         "keyring.backends.Windows",
-        "clr",  # pythonnet — winforms 백엔드가 사용
+        # pythonnet — winforms 가 clr 로 .NET 어셈블리를 로드한다
+        "clr",
+        "pythonnet",
     ]
 else:
     PLATFORM_HIDDEN = [
@@ -204,8 +208,8 @@ app = None if IS_WINDOWS else BUNDLE(
         "CFBundleName": "Data Manager",
         "CFBundleDisplayName": "Data Manager",
         "CFBundleIdentifier": "io.github.go-minseong.datamanager",
-        "CFBundleVersion": "2.4.1",
-        "CFBundleShortVersionString": "2.4.1",
+        "CFBundleVersion": "2.5.0",
+        "CFBundleShortVersionString": "2.5.0",
 
         # Dock 아이콘 표시 — 메뉴바 + Dock 병행
         "LSUIElement": False,

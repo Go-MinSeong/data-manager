@@ -32,11 +32,57 @@ import uvicorn
 from s3manager import settings
 
 
-# 진단: SIGUSR1 을 받으면 모든 스레드의 파이썬 스택을 stderr(로그 파일)로 덤프한다.
-# 데드락/행 상태에서도 동작한다(C 시그널 핸들러가 fd에 직접 write — 락·버퍼 우회).
-# 사용: kill -USR1 <pid>  → ~/Library/Logs/DataManager.log 에 스택이 찍힌다.
-faulthandler.enable()
-# SIGUSR1 은 유닉스 전용 — Windows 에는 없으므로 건너뛴다(Windows 진단은 로그 파일 사용).
+# 진단 로그·스택 덤프 설정.
+#
+# ⚠️ Windows 의 창 모드 실행 파일(console=False)은 sys.stderr 가 None 이다.
+#    그대로 faulthandler.enable() 을 부르면 RuntimeError 로 앱이 기동조차 못 한다.
+#    게다가 stdout/stderr 가 사라져 실패 원인을 볼 방법이 없으므로 파일 로그를 남긴다.
+#    (macOS 는 LaunchAgent 가 stderr 를 ~/Library/Logs/DataManager.log 로 보낸다.)
+_log_fp = None  # 파일 핸들 전역 유지 — 닫히면 faulthandler 가 쓰지 못한다
+
+
+def _setup_diagnostics() -> None:
+    """faulthandler + (stderr 가 없는 환경에서는) 회전 파일 로그를 설정한다."""
+    global _log_fp
+
+    need_file = settings.IS_WINDOWS or sys.stderr is None
+    if need_file:
+        try:
+            log_dir = settings.APP_SUPPORT_DIR / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / "app.log"
+
+            # 로깅: 회전 파일 핸들러(무한 증가 방지 — 과거 예외 폭주로 로그가 폭증한 적 있음)
+            from logging.handlers import RotatingFileHandler
+
+            handler = RotatingFileHandler(
+                log_path, maxBytes=2 * 1024 * 1024, backupCount=2, encoding="utf-8"
+            )
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+            )
+            root = logging.getLogger()
+            root.addHandler(handler)
+            root.setLevel(logging.WARNING)
+
+            # faulthandler 는 파일 객체(fd)에 직접 쓴다 — 열어둔 채 유지한다.
+            _log_fp = open(log_path, "a", encoding="utf-8")
+            faulthandler.enable(file=_log_fp)
+            return
+        except Exception:
+            # 파일 로그 설정 실패가 기동을 막아서는 안 된다.
+            pass
+
+    try:
+        faulthandler.enable()
+    except Exception:
+        pass
+
+
+_setup_diagnostics()
+
+# SIGUSR1 → 모든 스레드의 파이썬 스택 덤프(데드락 중에도 동작: C 핸들러가 fd 직접 write).
+# 사용: kill -USR1 <pid>. 유닉스 전용 — Windows 에는 없으므로 건너뛴다.
 if hasattr(signal, "SIGUSR1"):
     try:
         faulthandler.register(signal.SIGUSR1, all_threads=True, chain=False)
@@ -236,10 +282,23 @@ def main() -> None:
     # ---------------------------------------------------------------- #
 
     _quit_requested = threading.Event()
+    # 트레이 참조는 아래에서 채워지지만, Windows 는 트레이가 별도 스레드로 먼저 뜨므로
+    # quit_app 이 그 전에 불릴 여지가 있다. 미리 비워 두어 NameError 를 막는다.
+    _tray_refs: list[object] = []
 
     def quit_app() -> None:
-        """메뉴바 "종료" 클릭 → 서버·창 정리하고 종료."""
+        """메뉴바/트레이 "종료" 클릭 → 서버·창 정리하고 종료."""
         _quit_requested.set()
+        # Windows: pystray 아이콘을 명시적으로 정리한다. 안 그러면 프로세스가 끝나도
+        # 트레이에 아이콘 잔상이 남아(마우스를 올려야 사라짐) 종료된 걸로 안 보인다.
+        if settings.IS_WINDOWS:
+            for ref in _tray_refs:
+                stop = getattr(ref, "stop", None)
+                if callable(stop):
+                    try:
+                        stop()
+                    except Exception:
+                        pass
         # pywebview 종료 → webview.start() 반환 → 프로세스 종료
         try:
             webview.windows[0].destroy()
@@ -254,8 +313,8 @@ def main() -> None:
     # 메인 스레드에서 만들어 pywebview 런루프가 함께 구동하게 한다.
     from s3manager.shell.tray import create_status_item
 
-    # GC 방지: 메뉴바 객체 참조를 살려둔다
-    _tray_refs = create_status_item(show_window=show_window, quit_app=quit_app)
+    # GC 방지: 메뉴바/트레이 객체 참조를 살려둔다(위에서 만든 리스트를 그대로 채운다)
+    _tray_refs.extend(create_status_item(show_window=show_window, quit_app=quit_app))
 
     # ---------------------------------------------------------------- #
     #  6. pywebview 메인 루프 (메인 스레드 — macOS 필수)                  #
